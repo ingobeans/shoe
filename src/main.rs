@@ -2,6 +2,7 @@ use crossterm::{
     cursor::{MoveLeft, MoveRight},
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     queue,
+    style::{Color, SetForegroundColor},
     terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
 };
 use std::{
@@ -27,8 +28,11 @@ impl Shoe {
             cursor_pos: 0,
         })
     }
-    fn handle_command(&mut self, parts: Vec<String>) -> Result<()> {
-        println!("you wrote: {:?}", parts);
+    fn handle_command(&mut self, parts: Vec<CommandPart>) -> Result<()> {
+        println!(
+            "you wrote: {:?}",
+            parts.iter().map(|i| &i.text).collect::<Vec<&String>>()
+        );
         Ok(())
     }
     fn write_char(&mut self, new_char: char) {
@@ -105,9 +109,32 @@ impl Shoe {
         }
         Ok(())
     }
+    fn print_text(&self) -> Result<()> {
+        let parts = parse_parts(&self.input_text, true);
+        for part in parts {
+            let color = match part.part_type {
+                CommandPartType::Keyword => Color::Rgb {
+                    r: 255,
+                    g: 173,
+                    b: 228,
+                },
+                CommandPartType::QuotesArg => Color::Rgb {
+                    r: 173,
+                    g: 226,
+                    b: 255,
+                },
+                CommandPartType::RegularArg => Color::White,
+                CommandPartType::Special => Color::White,
+            };
+            queue!(stdout(), SetForegroundColor(color))?;
+            print!("{}", part.text);
+            queue!(stdout(), SetForegroundColor(Color::Reset))?;
+        }
+        Ok(())
+    }
     fn update(&self) -> Result<()> {
         queue!(stdout(), Clear(ClearType::UntilNewLine))?;
-        print!("{}", self.input_text);
+        self.print_text()?;
         if self.input_text.chars().count() != 0 {
             queue!(stdout(), MoveLeft((self.input_text.chars().count()) as u16))?;
         }
@@ -127,7 +154,7 @@ impl Shoe {
     fn start(&mut self) -> Result<()> {
         self.running = true;
         while self.running {
-            let command = vec![self.listen()?];
+            let command = parse_parts(&self.listen()?, false);
             self.handle_command(command)?;
         }
         Ok(())
@@ -150,6 +177,66 @@ impl Shoe {
         self.cursor_pos = 0;
         Ok(text)
     }
+}
+
+enum CommandPartType {
+    Keyword,
+    QuotesArg,
+    RegularArg,
+    Special,
+}
+struct CommandPart {
+    text: String,
+    part_type: CommandPartType,
+}
+
+fn parse_parts(text: &str, include_seperators: bool) -> Vec<CommandPart> {
+    // i hate this code
+    // too much logic
+    let mut parts = vec![CommandPart {
+        text: String::new(),
+        part_type: CommandPartType::Keyword,
+    }];
+    let mut last_char_was_backslash = false;
+    let mut in_quote = false;
+    for char in text.chars() {
+        let last = parts.last_mut().unwrap();
+
+        if char == '\\' {
+            if include_seperators || last_char_was_backslash {
+                last.text.insert(last.text.len(), char);
+                if last_char_was_backslash {
+                    last_char_was_backslash = false;
+                    continue;
+                }
+            }
+            last_char_was_backslash = true;
+            continue;
+        }
+        if char == '"' && !last_char_was_backslash && (in_quote || last.text.is_empty()) {
+            in_quote = !in_quote;
+            if in_quote {
+                last.part_type = CommandPartType::QuotesArg;
+            }
+            if !include_seperators {
+                continue;
+            }
+        }
+        if char == ' ' && !in_quote {
+            if include_seperators {
+                last.text.insert(last.text.len(), char);
+            }
+            parts.push(CommandPart {
+                text: String::new(),
+                part_type: CommandPartType::RegularArg,
+            });
+            last_char_was_backslash = false;
+            continue;
+        }
+        last.text.insert(last.text.len(), char);
+        last_char_was_backslash = false;
+    }
+    parts
 }
 
 fn main() {
