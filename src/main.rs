@@ -150,7 +150,7 @@ impl Shoe {
                 CommandPartType::Keyword => colors::PRIMARY_COLOR,
                 CommandPartType::QuotesArg => colors::SECONDARY_COLOR,
                 CommandPartType::RegularArg => Color::White,
-                CommandPartType::Special => Color::White,
+                CommandPartType::_Special => Color::White,
             };
             queue!(stdout(), SetForegroundColor(color))?;
             print!("{}", part.text);
@@ -200,7 +200,7 @@ impl Shoe {
         if self.input_text.chars().count() != 0 {
             queue!(stdout(), MoveRight(self.input_text.chars().count() as u16))?;
         }
-        print!("\n");
+        println!();
         disable_raw_mode()?;
         let text = self.input_text.clone();
         self.input_text = String::new();
@@ -213,7 +213,7 @@ enum CommandPartType {
     Keyword,
     QuotesArg,
     RegularArg,
-    Special,
+    _Special,
 }
 struct CommandPart {
     text: String,

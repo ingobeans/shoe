@@ -1,4 +1,4 @@
-use std::{error::Error, fs, io::stdout, path::PathBuf};
+use std::{error::Error, fs, io::stdout};
 
 use crossterm::{
     queue,
@@ -7,7 +7,7 @@ use crossterm::{
 
 use crate::colors;
 
-fn ls(args: &Vec<&String>) -> Result<CommandResult, Box<dyn Error>> {
+fn ls(args: &[&String]) -> Result<CommandResult, Box<dyn Error>> {
     let items = fs::read_dir(args.first().unwrap_or(&&".".to_string()))?;
 
     let mut dirs = vec![];
@@ -36,7 +36,7 @@ fn ls(args: &Vec<&String>) -> Result<CommandResult, Box<dyn Error>> {
     Ok(CommandResult::Lovely)
 }
 
-fn cd(args: &Vec<&String>) -> Result<CommandResult, Box<dyn Error>> {
+fn cd(args: &[&String]) -> Result<CommandResult, Box<dyn Error>> {
     let path = args.first();
     if let Some(path) = path {
         let path = shellexpand::tilde(path).to_string();
