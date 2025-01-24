@@ -1,8 +1,9 @@
 use std::{error::Error, fs, io::stdout};
 
 use crossterm::{
-    queue,
+    cursor, execute, queue,
     style::{Color, SetForegroundColor},
+    terminal,
 };
 
 use crate::colors;
@@ -66,6 +67,14 @@ fn echo(args: &Vec<&String>) -> Result<CommandResult, Box<dyn Error>> {
     }
     Ok(CommandResult::Lovely)
 }
+fn cls() -> Result<CommandResult, Box<dyn Error>> {
+    execute!(
+        stdout(),
+        cursor::MoveTo(0, 0),
+        terminal::Clear(terminal::ClearType::All)
+    )?;
+    Ok(CommandResult::Lovely)
+}
 
 pub enum CommandResult {
     Lovely,
@@ -81,6 +90,7 @@ pub fn execute_command(keyword: &str, args: &Vec<&String>) -> CommandResult {
         "cd" => handle_result(cd(args)),
         "pwd" => handle_result(pwd()),
         "echo" => handle_result(echo(args)),
+        "cls" => handle_result(cls()),
         "exit" => CommandResult::Exit,
         _ => CommandResult::NotACommand,
     }
