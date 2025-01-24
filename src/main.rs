@@ -5,11 +5,11 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
 };
 use std::{
-    io::{stdin, stdout, Read, Result, Write},
+    io::{stdout, Result, Write},
     path::PathBuf,
 };
 
-struct Ash {
+struct Shoe {
     running: bool,
     listening: bool,
     cwd: PathBuf,
@@ -17,9 +17,9 @@ struct Ash {
     cursor_pos: usize,
 }
 
-impl Ash {
+impl Shoe {
     fn new() -> Result<Self> {
-        Ok(Ash {
+        Ok(Shoe {
             running: false,
             listening: false,
             cwd: std::env::current_dir()?,
@@ -153,6 +153,6 @@ impl Ash {
 }
 
 fn main() {
-    let mut ash = Ash::new().unwrap();
-    ash.start().unwrap();
+    let mut shoe = Shoe::new().unwrap();
+    shoe.start().unwrap();
 }
