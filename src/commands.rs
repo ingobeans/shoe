@@ -1,6 +1,9 @@
 use std::{error::Error, fs, io::stdout, path::PathBuf};
 
-use crossterm::{queue, style::SetForegroundColor};
+use crossterm::{
+    queue,
+    style::{Color, SetForegroundColor},
+};
 
 use crate::colors;
 
@@ -55,12 +58,20 @@ fn pwd(cwd: &mut PathBuf) -> Result<(), Box<dyn Error>> {
     );
     Ok(())
 }
+fn echo(args: &Vec<&String>) -> Result<(), Box<dyn Error>> {
+    queue!(stdout(), SetForegroundColor(Color::Reset))?;
+    for line in args {
+        println!("{}", line);
+    }
+    Ok(())
+}
 
 pub fn execute_command(keyword: &str, args: &Vec<&String>, cwd: &mut PathBuf) -> bool {
     match keyword {
         "ls" => handle_result(ls(args)),
         "cd" => handle_result(cd(args, cwd)),
         "pwd" => handle_result(pwd(cwd)),
+        "echo" => handle_result(echo(args)),
         _ => false,
     }
 }
