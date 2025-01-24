@@ -37,7 +37,19 @@ impl Shoe {
         if let Some(keyword) = keyword {
             let keyword_text = keyword.text;
             let args: Vec<&String> = parts.iter().map(|item| &item.text).collect();
-            if commands::execute_command(&keyword_text, &args, &mut self.cwd) {
+            let result = commands::execute_command(&keyword_text, &args);
+            match result {
+                commands::CommandResult::NotACommand => {}
+                commands::CommandResult::Exit => {
+                    self.listening = false;
+                    self.running = false;
+                }
+                commands::CommandResult::UpdateCwd => {
+                    self.cwd = std::env::current_dir()?;
+                }
+                _ => {}
+            }
+            if !matches!(result, commands::CommandResult::NotACommand) {
                 queue!(stdout(), SetForegroundColor(Color::Reset))?;
                 return Ok(());
             }

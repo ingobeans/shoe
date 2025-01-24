@@ -7,7 +7,7 @@ use crossterm::{
 
 use crate::colors;
 
-fn ls(args: &Vec<&String>) -> Result<(), Box<dyn Error>> {
+fn ls(args: &Vec<&String>) -> Result<CommandResult, Box<dyn Error>> {
     let items = fs::read_dir(args.first().unwrap_or(&&".".to_string()))?;
 
     let mut dirs = vec![];
@@ -33,10 +33,10 @@ fn ls(args: &Vec<&String>) -> Result<(), Box<dyn Error>> {
     for dir in files {
         println!("{}", dir)
     }
-    Ok(())
+    Ok(CommandResult::Lovely)
 }
 
-fn cd(args: &Vec<&String>, cwd: &mut PathBuf) -> Result<(), Box<dyn Error>> {
+fn cd(args: &Vec<&String>) -> Result<CommandResult, Box<dyn Error>> {
     let path = args.first();
     if let Some(path) = path {
         let path = shellexpand::tilde(path).to_string();
@@ -45,42 +45,54 @@ fn cd(args: &Vec<&String>, cwd: &mut PathBuf) -> Result<(), Box<dyn Error>> {
             Err(std::io::Error::other("Path is a file"))?
         }
         std::env::set_current_dir(path)?;
-        *cwd = std::env::current_dir()?;
     }
-    Ok(())
+    Ok(CommandResult::UpdateCwd)
 }
 
-fn pwd(cwd: &mut PathBuf) -> Result<(), Box<dyn Error>> {
+fn pwd() -> Result<CommandResult, Box<dyn Error>> {
     queue!(stdout(), SetForegroundColor(colors::SECONDARY_COLOR))?;
     println!(
         "{}",
-        cwd.to_str()
+        std::env::current_dir()?
+            .to_str()
             .ok_or(std::io::Error::other("Couldn't read path as string"))?
     );
-    Ok(())
+    Ok(CommandResult::Lovely)
 }
-fn echo(args: &Vec<&String>) -> Result<(), Box<dyn Error>> {
+fn echo(args: &Vec<&String>) -> Result<CommandResult, Box<dyn Error>> {
     queue!(stdout(), SetForegroundColor(Color::Reset))?;
     for line in args {
         println!("{}", line);
     }
-    Ok(())
+    Ok(CommandResult::Lovely)
 }
 
-pub fn execute_command(keyword: &str, args: &Vec<&String>, cwd: &mut PathBuf) -> bool {
+pub enum CommandResult {
+    Lovely,
+    Exit,
+    UpdateCwd,
+    Error,
+    NotACommand,
+}
+
+pub fn execute_command(keyword: &str, args: &Vec<&String>) -> CommandResult {
     match keyword {
         "ls" => handle_result(ls(args)),
-        "cd" => handle_result(cd(args, cwd)),
-        "pwd" => handle_result(pwd(cwd)),
+        "cd" => handle_result(cd(args)),
+        "pwd" => handle_result(pwd()),
         "echo" => handle_result(echo(args)),
-        _ => false,
+        "exit" => CommandResult::Exit,
+        _ => CommandResult::NotACommand,
     }
 }
 
-pub fn handle_result(result: Result<(), Box<dyn Error>>) -> bool {
-    if let Err(error) = result {
-        let _ = queue!(stdout(), SetForegroundColor(colors::ERR_COLOR));
-        println!("{}", error);
+pub fn handle_result(result: Result<CommandResult, Box<dyn Error>>) -> CommandResult {
+    match result {
+        Err(error) => {
+            let _ = queue!(stdout(), SetForegroundColor(colors::ERR_COLOR));
+            println!("{}", error);
+            CommandResult::Error
+        }
+        Ok(result) => result,
     }
-    true
 }
