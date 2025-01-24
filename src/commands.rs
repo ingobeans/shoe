@@ -39,7 +39,8 @@ fn ls(args: &Vec<&String>) -> Result<(), Box<dyn Error>> {
 fn cd(args: &Vec<&String>, cwd: &mut PathBuf) -> Result<(), Box<dyn Error>> {
     let path = args.first();
     if let Some(path) = path {
-        let metadata = fs::metadata(path)?;
+        let path = shellexpand::tilde(path).to_string();
+        let metadata = fs::metadata(&path)?;
         if metadata.is_file() {
             Err(std::io::Error::other("Path is a file"))?
         }
