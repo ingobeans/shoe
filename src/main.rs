@@ -6,8 +6,10 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
 };
 use std::{
+    collections::VecDeque,
     io::{stdout, Result, Write},
     path::PathBuf,
+    process,
 };
 
 struct Shoe {
@@ -28,11 +30,21 @@ impl Shoe {
             cursor_pos: 0,
         })
     }
-    fn handle_command(&mut self, parts: Vec<CommandPart>) -> Result<()> {
-        println!(
-            "you wrote: {:?}",
-            parts.iter().map(|i| &i.text).collect::<Vec<&String>>()
-        );
+    fn handle_command(&mut self, mut parts: VecDeque<CommandPart>) -> Result<()> {
+        let keyword = parts.pop_front();
+        if let Some(keyword) = keyword {
+            let mut command = process::Command::new(keyword.text);
+            command.args(parts.iter().map(|item| &item.text));
+            let process = command.spawn();
+            match process {
+                Ok(mut process) => {
+                    process.wait()?;
+                }
+                Err(_) => {
+                    println!("error!")
+                }
+            }
+        }
         Ok(())
     }
     fn write_char(&mut self, new_char: char) {
@@ -154,7 +166,11 @@ impl Shoe {
     fn start(&mut self) -> Result<()> {
         self.running = true;
         while self.running {
-            let command = parse_parts(&self.listen()?, false);
+            let command = &self.listen()?;
+            if command.is_empty() {
+                continue;
+            }
+            let command = parse_parts(command, false);
             self.handle_command(command)?;
         }
         Ok(())
@@ -170,7 +186,7 @@ impl Shoe {
         if self.input_text.chars().count() != 0 {
             queue!(stdout(), MoveRight(self.input_text.chars().count() as u16))?;
         }
-        println!("\n");
+        print!("\n");
         disable_raw_mode()?;
         let text = self.input_text.clone();
         self.input_text = String::new();
@@ -190,17 +206,18 @@ struct CommandPart {
     part_type: CommandPartType,
 }
 
-fn parse_parts(text: &str, include_seperators: bool) -> Vec<CommandPart> {
+fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
     // i hate this code
     // too much logic
-    let mut parts = vec![CommandPart {
+    let mut parts = VecDeque::new();
+    parts.push_back(CommandPart {
         text: String::new(),
         part_type: CommandPartType::Keyword,
-    }];
+    });
     let mut last_char_was_backslash = false;
     let mut in_quote = false;
     for char in text.chars() {
-        let last = parts.last_mut().unwrap();
+        let last = parts.back_mut().unwrap();
 
         if char == '\\' {
             if include_seperators || last_char_was_backslash {
@@ -226,7 +243,7 @@ fn parse_parts(text: &str, include_seperators: bool) -> Vec<CommandPart> {
             if include_seperators {
                 last.text.insert(last.text.len(), char);
             }
-            parts.push(CommandPart {
+            parts.push_back(CommandPart {
                 text: String::new(),
                 part_type: CommandPartType::RegularArg,
             });
