@@ -11,6 +11,8 @@ use std::{
     path::PathBuf,
     process,
 };
+mod colors;
+mod commands;
 
 struct Shoe {
     running: bool,
@@ -33,18 +35,26 @@ impl Shoe {
     fn handle_command(&mut self, mut parts: VecDeque<CommandPart>) -> Result<()> {
         let keyword = parts.pop_front();
         if let Some(keyword) = keyword {
-            let mut command = process::Command::new(keyword.text);
-            command.args(parts.iter().map(|item| &item.text));
+            let keyword_text = keyword.text;
+            let args: Vec<&String> = parts.iter().map(|item| &item.text).collect();
+            if commands::execute_command(&keyword_text, &args, &mut self.cwd) {
+                queue!(stdout(), SetForegroundColor(Color::Reset))?;
+                return Ok(());
+            }
+            let mut command = process::Command::new(keyword_text);
+            command.args(args);
             let process = command.spawn();
             match process {
                 Ok(mut process) => {
                     process.wait()?;
                 }
                 Err(_) => {
-                    println!("error!")
+                    queue!(stdout(), SetForegroundColor(colors::ERR_COLOR))?;
+                    println!("file not found! :(");
                 }
             }
         }
+        queue!(stdout(), SetForegroundColor(Color::Reset))?;
         Ok(())
     }
     fn write_char(&mut self, new_char: char) {
@@ -125,16 +135,8 @@ impl Shoe {
         let parts = parse_parts(&self.input_text, true);
         for part in parts {
             let color = match part.part_type {
-                CommandPartType::Keyword => Color::Rgb {
-                    r: 255,
-                    g: 173,
-                    b: 228,
-                },
-                CommandPartType::QuotesArg => Color::Rgb {
-                    r: 173,
-                    g: 226,
-                    b: 255,
-                },
+                CommandPartType::Keyword => colors::PRIMARY_COLOR,
+                CommandPartType::QuotesArg => colors::SECONDARY_COLOR,
                 CommandPartType::RegularArg => Color::White,
                 CommandPartType::Special => Color::White,
             };
