@@ -41,12 +41,8 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
         if char == '\\' {
             if include_seperators || last_char_was_backslash {
                 last.text.insert(last.text.len(), char);
-                if last_char_was_backslash {
-                    last_char_was_backslash = false;
-                    continue;
-                }
             }
-            last_char_was_backslash = true;
+            last_char_was_backslash = !last_char_was_backslash;
             continue;
         }
         if char == '"' && !last_char_was_backslash && (in_quote || last.text.is_empty()) {
