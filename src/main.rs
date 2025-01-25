@@ -22,6 +22,60 @@ struct Shoe {
     cursor_pos: usize,
 }
 
+/// Function parse line to arguments, with support for quote enclosures
+///
+/// Include seperators will ensure no character of text is lost
+fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
+    // i hate this code
+    // too much logic
+    let mut parts = VecDeque::new();
+    parts.push_back(CommandPart {
+        text: String::new(),
+        part_type: CommandPartType::Keyword,
+    });
+    let mut last_char_was_backslash = false;
+    let mut in_quote = false;
+    for char in text.chars() {
+        let last = parts.back_mut().unwrap();
+
+        if char == '\\' {
+            if include_seperators || last_char_was_backslash {
+                last.text.insert(last.text.len(), char);
+                if last_char_was_backslash {
+                    last_char_was_backslash = false;
+                    continue;
+                }
+            }
+            last_char_was_backslash = true;
+            continue;
+        }
+        if char == '"' && !last_char_was_backslash && (in_quote || last.text.is_empty()) {
+            in_quote = !in_quote;
+            if in_quote {
+                last.part_type = CommandPartType::QuotesArg;
+            }
+            if !include_seperators {
+                continue;
+            }
+        }
+        if char == ' ' && !in_quote {
+            if include_seperators {
+                last.text.insert(last.text.len(), char);
+            }
+            parts.push_back(CommandPart {
+                text: String::new(),
+                part_type: CommandPartType::RegularArg,
+            });
+            last_char_was_backslash = false;
+            continue;
+        }
+        last.text.insert(last.text.len(), char);
+        last_char_was_backslash = false;
+    }
+    parts
+}
+
+/// Replace substring in string (non case sensitive!!)
 fn replace_case_insensitive(source: String, pattern: String, replace: String) -> String {
     let mut pattern_index = 0;
     let mut found_index = None;
@@ -76,6 +130,7 @@ impl Shoe {
             cursor_pos: 0,
         })
     }
+    /// Convert cwd to a string, also replacing home path with ~
     fn cwd_to_str(&self) -> Result<String> {
         let path = self
             .cwd
@@ -195,6 +250,7 @@ impl Shoe {
         }
         Ok(())
     }
+    /// Prints current inputted text with color highlighting
     fn print_text(&self) -> Result<()> {
         let parts = parse_parts(&self.input_text, true);
         for part in parts {
@@ -279,57 +335,13 @@ struct CommandPart {
     part_type: CommandPartType,
 }
 
-fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
-    // i hate this code
-    // too much logic
-    let mut parts = VecDeque::new();
-    parts.push_back(CommandPart {
-        text: String::new(),
-        part_type: CommandPartType::Keyword,
-    });
-    let mut last_char_was_backslash = false;
-    let mut in_quote = false;
-    for char in text.chars() {
-        let last = parts.back_mut().unwrap();
-
-        if char == '\\' {
-            if include_seperators || last_char_was_backslash {
-                last.text.insert(last.text.len(), char);
-                if last_char_was_backslash {
-                    last_char_was_backslash = false;
-                    continue;
-                }
-            }
-            last_char_was_backslash = true;
-            continue;
-        }
-        if char == '"' && !last_char_was_backslash && (in_quote || last.text.is_empty()) {
-            in_quote = !in_quote;
-            if in_quote {
-                last.part_type = CommandPartType::QuotesArg;
-            }
-            if !include_seperators {
-                continue;
-            }
-        }
-        if char == ' ' && !in_quote {
-            if include_seperators {
-                last.text.insert(last.text.len(), char);
-            }
-            parts.push_back(CommandPart {
-                text: String::new(),
-                part_type: CommandPartType::RegularArg,
-            });
-            last_char_was_backslash = false;
-            continue;
-        }
-        last.text.insert(last.text.len(), char);
-        last_char_was_backslash = false;
-    }
-    parts
-}
-
 fn main() {
+    queue!(stdout(), SetForegroundColor(colors::SECONDARY_COLOR)).unwrap();
+    print!("shoe ");
+    queue!(stdout(), SetForegroundColor(Color::White)).unwrap();
+    print!("[v{}]\n\n", env!("CARGO_PKG_VERSION"));
+    stdout().flush().unwrap();
+
     let mut shoe = Shoe::new().unwrap();
     shoe.start().unwrap();
 }
