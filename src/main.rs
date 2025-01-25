@@ -22,6 +22,53 @@ struct Shoe {
     cursor_pos: usize,
 }
 
+fn replace_case_insensitive(source: String, pattern: String, replace: String) -> String {
+    let mut pattern_index = 0;
+    let mut found_index = None;
+    for (i, c) in source.chars().enumerate() {
+        if pattern_index >= pattern.chars().count() {
+            break;
+        }
+        if c.to_lowercase().collect::<String>()
+            == pattern
+                .chars()
+                .nth(pattern_index)
+                .unwrap()
+                .to_lowercase()
+                .collect::<String>()
+        {
+            if pattern_index == 0 {
+                found_index = Some(i);
+            }
+            pattern_index += 1;
+        } else if i == source.chars().count() - 1 {
+            found_index = None;
+            pattern_index = 0;
+        } else if found_index.is_some() {
+            found_index = None;
+            pattern_index = 0;
+        }
+        if i == source.chars().count() - 1 && pattern_index < pattern.chars().count() {
+            found_index = None;
+            pattern_index = 0;
+        }
+    }
+    match found_index {
+        Some(index) => {
+            let mut new = String::new();
+            for (i, c) in source.chars().enumerate() {
+                if i < index || i >= index + pattern.chars().count() {
+                    new.insert(new.len(), c);
+                } else if i == index {
+                    new.insert_str(new.len(), &replace);
+                }
+            }
+            new
+        }
+        None => source,
+    }
+}
+
 impl Shoe {
     fn new() -> Result<Self> {
         Ok(Shoe {
@@ -31,6 +78,15 @@ impl Shoe {
             input_text: String::new(),
             cursor_pos: 0,
         })
+    }
+    fn cwd_to_str(&self) -> Result<String> {
+        let mut path = self
+            .cwd
+            .to_str()
+            .ok_or(std::io::Error::other("Couldn't read path as string"))?
+            .to_string();
+        let home_path = shellexpand::tilde("~").to_string();
+        Ok(replace_case_insensitive(path, home_path, "~".to_string()))
     }
     fn handle_command(&mut self, mut parts: VecDeque<CommandPart>) -> Result<()> {
         let keyword = parts.pop_front();
@@ -192,7 +248,14 @@ impl Shoe {
     fn listen(&mut self) -> Result<String> {
         enable_raw_mode()?;
         self.listening = true;
-        print!(">");
+
+        queue!(stdout(), SetForegroundColor(colors::SECONDARY_COLOR))?;
+        print!("[");
+        queue!(stdout(), SetForegroundColor(Color::White))?;
+        print!("{}", self.cwd_to_str()?);
+        queue!(stdout(), SetForegroundColor(colors::SECONDARY_COLOR))?;
+        print!("]> ");
+
         stdout().flush()?;
         while self.listening {
             self.handle_key_press(event::read()?)?;
