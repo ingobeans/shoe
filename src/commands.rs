@@ -1,4 +1,8 @@
-use std::{error::Error, fs, io::stdout};
+use std::{
+    error::Error,
+    fs,
+    io::{stdout, Read},
+};
 
 use crossterm::{
     cursor, execute, queue,
@@ -75,13 +79,18 @@ fn cls() -> Result<CommandResult, Box<dyn Error>> {
     )?;
     Ok(CommandResult::Lovely)
 }
+fn cat(args: &[&String]) -> Result<CommandResult, Box<dyn Error>> {
+    let path = args
+        .first()
+        .ok_or(std::io::Error::other("No path specified"))?;
+    let mut file = fs::File::open(path)?;
+    let mut buf = String::new();
+    file.read_to_string(&mut buf)?;
 
-pub enum CommandResult {
-    Lovely,
-    Exit,
-    UpdateCwd,
-    Error,
-    NotACommand,
+    queue!(stdout(), SetForegroundColor(Color::Reset))?;
+    println!("{}", buf);
+
+    Ok(CommandResult::Lovely)
 }
 
 pub fn execute_command(keyword: &str, args: &Vec<&String>) -> CommandResult {
@@ -91,9 +100,18 @@ pub fn execute_command(keyword: &str, args: &Vec<&String>) -> CommandResult {
         "pwd" => handle_result(pwd()),
         "echo" => handle_result(echo(args)),
         "cls" => handle_result(cls()),
+        "cat" => handle_result(cat(args)),
         "exit" => CommandResult::Exit,
         _ => CommandResult::NotACommand,
     }
+}
+
+pub enum CommandResult {
+    Lovely,
+    Exit,
+    UpdateCwd,
+    Error,
+    NotACommand,
 }
 
 pub fn handle_result(result: Result<CommandResult, Box<dyn Error>>) -> CommandResult {
