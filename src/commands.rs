@@ -92,6 +92,10 @@ fn cat(args: &[&String]) -> Result<CommandResult, Box<dyn Error>> {
 
     Ok(CommandResult::Lovely)
 }
+fn help() -> Result<CommandResult, Box<dyn Error>> {
+    println!("{}", include_str!("help.txt"));
+    Ok(CommandResult::Lovely)
+}
 
 pub fn execute_command(keyword: &str, args: &Vec<&String>) -> CommandResult {
     match keyword {
@@ -101,6 +105,7 @@ pub fn execute_command(keyword: &str, args: &Vec<&String>) -> CommandResult {
         "echo" => handle_result(echo(args)),
         "cls" => handle_result(cls()),
         "cat" => handle_result(cat(args)),
+        "help" => handle_result(help()),
         "exit" => CommandResult::Exit,
         _ => CommandResult::NotACommand,
     }

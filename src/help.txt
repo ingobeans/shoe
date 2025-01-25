@@ -1,0 +1,8 @@
+ls		list files in dir
+cd		change dir
+pwd		print working dir
+echo		print text
+cls		clear console
+cat		print contents of file
+help		print this
+exit		exit
