@@ -58,10 +58,13 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
             if include_seperators {
                 last.text.insert(last.text.len(), char);
             }
-            parts.push_back(CommandPart {
-                text: String::new(),
-                part_type: CommandPartType::RegularArg,
-            });
+            if !last.text.trim().is_empty() || matches!(last.part_type, CommandPartType::QuotesArg)
+            {
+                parts.push_back(CommandPart {
+                    text: String::new(),
+                    part_type: CommandPartType::RegularArg,
+                });
+            }
             last_char_was_backslash = false;
             continue;
         }
