@@ -51,6 +51,7 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
                 last.part_type = CommandPartType::QuotesArg;
             }
             if !include_seperators {
+                last_char_was_backslash = false;
                 continue;
             }
         }
@@ -66,6 +67,27 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
                 });
             }
             last_char_was_backslash = false;
+            continue;
+        }
+        if char == ';' && !in_quote && !last_char_was_backslash {
+            last_char_was_backslash = false;
+            if !last.text.is_empty() {
+                parts.push_back(CommandPart {
+                    text: String::from(char),
+                    part_type: CommandPartType::Special,
+                });
+                parts.push_back(CommandPart {
+                    text: String::new(),
+                    part_type: CommandPartType::Keyword,
+                });
+                continue;
+            }
+            last.part_type = CommandPartType::Special;
+            last.text.insert(last.text.len(), char);
+            parts.push_back(CommandPart {
+                text: String::new(),
+                part_type: CommandPartType::Keyword,
+            });
             continue;
         }
         last.text.insert(last.text.len(), char);
@@ -257,7 +279,7 @@ impl Shoe {
                 CommandPartType::Keyword => colors::PRIMARY_COLOR,
                 CommandPartType::QuotesArg => colors::SECONDARY_COLOR,
                 CommandPartType::RegularArg => Color::White,
-                CommandPartType::_Special => Color::White,
+                CommandPartType::Special => colors::SECONDARY_COLOR,
             };
             queue!(stdout(), SetForegroundColor(color))?;
             print!("{}", part.text);
@@ -291,8 +313,17 @@ impl Shoe {
             if command.is_empty() {
                 continue;
             }
-            let command = parse_parts(command, false);
-            self.handle_command(command)?;
+            let parts = parse_parts(command, false);
+            let mut current_command = VecDeque::new();
+            for part in parts {
+                if let CommandPartType::Special = part.part_type {
+                    self.handle_command(current_command)?;
+                    current_command = VecDeque::new();
+                } else {
+                    current_command.push_back(part);
+                }
+            }
+            self.handle_command(current_command)?;
         }
         Ok(())
     }
@@ -327,7 +358,7 @@ enum CommandPartType {
     Keyword,
     QuotesArg,
     RegularArg,
-    _Special,
+    Special,
 }
 struct CommandPart {
     text: String,
