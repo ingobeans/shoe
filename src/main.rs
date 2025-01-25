@@ -41,10 +41,7 @@ fn replace_case_insensitive(source: String, pattern: String, replace: String) ->
                 found_index = Some(i);
             }
             pattern_index += 1;
-        } else if i == source.chars().count() - 1 {
-            found_index = None;
-            pattern_index = 0;
-        } else if found_index.is_some() {
+        } else if i == source.chars().count() - 1 || found_index.is_some() {
             found_index = None;
             pattern_index = 0;
         }
@@ -80,7 +77,7 @@ impl Shoe {
         })
     }
     fn cwd_to_str(&self) -> Result<String> {
-        let mut path = self
+        let path = self
             .cwd
             .to_str()
             .ok_or(std::io::Error::other("Couldn't read path as string"))?
