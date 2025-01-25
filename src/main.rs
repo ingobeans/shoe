@@ -160,11 +160,10 @@ impl Shoe {
                 KeyCode::Char(char) => {
                     if key_event.modifiers.contains(KeyModifiers::CONTROL) && char == 'c' {
                         self.listening = false;
-                        self.running = false;
-                        return Ok(());
+                    } else {
+                        self.write_char(char);
+                        self.cursor_pos += 1;
                     }
-                    self.write_char(char);
-                    self.cursor_pos += 1;
                 }
                 KeyCode::Delete => {
                     self.delete_char();
