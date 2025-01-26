@@ -80,15 +80,20 @@ fn cls() -> Result<CommandResult, Box<dyn Error>> {
     Ok(CommandResult::Lovely)
 }
 fn cat(args: &[&String]) -> Result<CommandResult, Box<dyn Error>> {
-    let path = args
-        .first()
-        .ok_or(std::io::Error::other("No path specified"))?;
-    let mut file = fs::File::open(path)?;
-    let mut buf = String::new();
-    file.read_to_string(&mut buf)?;
+    let path = args.first();
+    match path {
+        Some(path) => {
+            let mut file = fs::File::open(path)?;
+            let mut buf = String::new();
+            file.read_to_string(&mut buf)?;
 
-    queue!(stdout(), SetForegroundColor(Color::Reset))?;
-    println!("{}", buf);
+            queue!(stdout(), SetForegroundColor(Color::Reset))?;
+            println!("{}", buf);
+        }
+        None => {
+            println!("meow");
+        }
+    }
 
     Ok(CommandResult::Lovely)
 }
