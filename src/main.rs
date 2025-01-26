@@ -7,7 +7,7 @@ use crossterm::{
 };
 use std::{
     collections::VecDeque,
-    io::{stdout, Result, Write},
+    io::{stdin, stdout, Result, Write},
     path::PathBuf,
     process,
 };
@@ -161,40 +161,40 @@ impl Shoe {
         let home_path = shellexpand::tilde("~").to_string();
         Ok(replace_case_insensitive(path, home_path, "~".to_string()))
     }
-    fn handle_command(&mut self, mut parts: VecDeque<CommandPart>) -> Result<()> {
-        let keyword = parts.pop_front();
-        if let Some(keyword) = keyword {
-            let keyword_text = keyword.text;
-            let args: Vec<&String> = parts.iter().map(|item| &item.text).collect();
-            let result = commands::execute_command(&keyword_text, &args);
-            match result {
-                commands::CommandResult::NotACommand => {}
-                commands::CommandResult::Exit => {
-                    self.listening = false;
-                    self.running = false;
-                }
-                commands::CommandResult::UpdateCwd => {
-                    self.cwd = std::env::current_dir()?;
-                }
-                _ => {}
+    fn execute_command(
+        &mut self,
+        keyword: &String,
+        context: commands::CommandContext,
+    ) -> Result<()> {
+        let result = commands::execute_command(keyword, &context);
+        match result {
+            commands::CommandResult::NotACommand => {}
+            commands::CommandResult::Exit => {
+                self.listening = false;
+                self.running = false;
             }
-            if !matches!(result, commands::CommandResult::NotACommand) {
-                queue!(stdout(), SetForegroundColor(Color::Reset))?;
-                return Ok(());
+            commands::CommandResult::UpdateCwd => {
+                self.cwd = std::env::current_dir()?;
             }
-            let mut command = process::Command::new(&keyword_text);
-            command.args(args);
-            let process = command.spawn();
-            match process {
-                Ok(mut process) => {
-                    process.wait()?;
-                }
-                Err(_) => {
-                    queue!(stdout(), SetForegroundColor(colors::ERR_COLOR))?;
-                    println!("file/command '{}' not found! :(", keyword_text);
-                }
+            _ => {}
+        }
+        if !matches!(result, commands::CommandResult::NotACommand) {
+            queue!(stdout(), SetForegroundColor(Color::Reset))?;
+            return Ok(());
+        }
+        let mut command = process::Command::new(keyword);
+        command.args(context.args);
+        let process = command.spawn();
+        match process {
+            Ok(mut process) => {
+                process.wait()?;
+            }
+            Err(_) => {
+                queue!(stdout(), SetForegroundColor(colors::ERR_COLOR))?;
+                println!("file/command '{}' not found! :(", keyword);
             }
         }
+
         queue!(stdout(), SetForegroundColor(Color::Reset))?;
         Ok(())
     }
@@ -314,16 +314,29 @@ impl Shoe {
                 continue;
             }
             let parts = parse_parts(command, false);
-            let mut current_command = VecDeque::new();
+            let mut commands: Vec<VecDeque<CommandPart>> = vec![VecDeque::new()];
+
             for part in parts {
+                let current_command = commands.last_mut().unwrap();
                 if let CommandPartType::Special = part.part_type {
-                    self.handle_command(current_command)?;
-                    current_command = VecDeque::new();
+                    commands.push(VecDeque::new());
                 } else {
                     current_command.push_back(part);
                 }
             }
-            self.handle_command(current_command)?;
+            for command in commands {
+                let mut args: VecDeque<&String> = command.iter().map(|item| &item.text).collect();
+                let keyword = args.pop_front();
+                if let Some(keyword) = keyword {
+                    let context = commands::CommandContext {
+                        args: &args,
+                        stdout: stdout(),
+                        _stdin: stdin(),
+                    };
+
+                    self.execute_command(keyword, context)?;
+                }
+            }
         }
         Ok(())
     }

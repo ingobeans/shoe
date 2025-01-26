@@ -1,7 +1,8 @@
 use std::{
+    collections::VecDeque,
     error::Error,
     fs,
-    io::{stdin, stdout, Read, Stdin, Stdout, Write},
+    io::{stdout, Read, Stdin, Stdout, Write},
 };
 
 use crossterm::{
@@ -12,8 +13,8 @@ use crossterm::{
 
 use crate::colors;
 
-fn ls(context: CommandContext) -> Result<CommandResult, Box<dyn Error>> {
-    let items = fs::read_dir(context.args.first().unwrap_or(&&".".to_string()))?;
+fn ls(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+    let items = fs::read_dir(context.args.front().unwrap_or(&&".".to_string()))?;
 
     let mut dirs = vec![];
     let mut files = vec![];
@@ -41,8 +42,8 @@ fn ls(context: CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     Ok(CommandResult::Lovely)
 }
 
-fn cd(context: CommandContext) -> Result<CommandResult, Box<dyn Error>> {
-    let path = context.args.first();
+fn cd(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+    let path = context.args.front();
     if let Some(path) = path {
         let path = shellexpand::tilde(path).to_string();
         let metadata = fs::metadata(&path)?;
@@ -54,7 +55,7 @@ fn cd(context: CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     Ok(CommandResult::UpdateCwd)
 }
 
-fn pwd(context: CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+fn pwd(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     queue!(stdout(), SetForegroundColor(colors::SECONDARY_COLOR))?;
     writeln!(
         context.stdout.lock(),
@@ -65,14 +66,14 @@ fn pwd(context: CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     )?;
     Ok(CommandResult::Lovely)
 }
-fn echo(context: CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+fn echo(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     queue!(stdout(), SetForegroundColor(Color::Reset))?;
     for line in context.args {
         writeln!(context.stdout.lock(), "{}", line)?;
     }
     Ok(CommandResult::Lovely)
 }
-fn cls(context: CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+fn cls(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     execute!(
         context.stdout.lock(),
         cursor::MoveTo(0, 0),
@@ -80,8 +81,8 @@ fn cls(context: CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     )?;
     Ok(CommandResult::Lovely)
 }
-fn cat(context: CommandContext) -> Result<CommandResult, Box<dyn Error>> {
-    let path = context.args.first();
+fn cat(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+    let path = context.args.front();
     match path {
         Some(path) => {
             let mut file = fs::File::open(path)?;
@@ -98,17 +99,12 @@ fn cat(context: CommandContext) -> Result<CommandResult, Box<dyn Error>> {
 
     Ok(CommandResult::Lovely)
 }
-fn help(context: CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+fn help(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     writeln!(context.stdout.lock(), "{}", include_str!("help.txt"))?;
     Ok(CommandResult::Lovely)
 }
 
-pub fn execute_command(keyword: &str, args: &Vec<&String>) -> CommandResult {
-    let context = CommandContext {
-        args: args,
-        _stdin: stdin(),
-        stdout: stdout(),
-    };
+pub fn execute_command(keyword: &str, context: &CommandContext) -> CommandResult {
     match keyword {
         "ls" => handle_result(ls(context)),
         "cd" => handle_result(cd(context)),
@@ -123,9 +119,9 @@ pub fn execute_command(keyword: &str, args: &Vec<&String>) -> CommandResult {
 }
 
 pub struct CommandContext<'a> {
-    args: &'a Vec<&'a String>,
-    stdout: Stdout,
-    _stdin: Stdin,
+    pub args: &'a VecDeque<&'a String>,
+    pub stdout: Stdout,
+    pub _stdin: Stdin,
 }
 
 pub enum CommandResult {
