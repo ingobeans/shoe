@@ -182,7 +182,7 @@ impl Shoe {
                 queue!(stdout(), SetForegroundColor(Color::Reset))?;
                 return Ok(());
             }
-            let mut command = process::Command::new(keyword_text);
+            let mut command = process::Command::new(&keyword_text);
             command.args(args);
             let process = command.spawn();
             match process {
@@ -191,7 +191,7 @@ impl Shoe {
                 }
                 Err(_) => {
                     queue!(stdout(), SetForegroundColor(colors::ERR_COLOR))?;
-                    println!("file not found! :(");
+                    println!("file/command '{}' not found! :(", keyword_text);
                 }
             }
         }
