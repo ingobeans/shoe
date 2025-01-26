@@ -1,7 +1,7 @@
 use std::{
     error::Error,
     fs,
-    io::{stdout, Read},
+    io::{stdin, stdout, Read, Stdin, Stdout, Write},
 };
 
 use crossterm::{
@@ -12,8 +12,8 @@ use crossterm::{
 
 use crate::colors;
 
-fn ls(args: &[&String]) -> Result<CommandResult, Box<dyn Error>> {
-    let items = fs::read_dir(args.first().unwrap_or(&&".".to_string()))?;
+fn ls(context: CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+    let items = fs::read_dir(context.args.first().unwrap_or(&&".".to_string()))?;
 
     let mut dirs = vec![];
     let mut files = vec![];
@@ -32,17 +32,17 @@ fn ls(args: &[&String]) -> Result<CommandResult, Box<dyn Error>> {
     }
     queue!(stdout(), SetForegroundColor(colors::PRIMARY_COLOR))?;
     for dir in dirs {
-        println!("{}", dir)
+        writeln!(context.stdout.lock(), "{}", dir)?;
     }
     queue!(stdout(), SetForegroundColor(colors::SECONDARY_COLOR))?;
     for dir in files {
-        println!("{}", dir)
+        writeln!(context.stdout.lock(), "{}", dir)?;
     }
     Ok(CommandResult::Lovely)
 }
 
-fn cd(args: &[&String]) -> Result<CommandResult, Box<dyn Error>> {
-    let path = args.first();
+fn cd(context: CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+    let path = context.args.first();
     if let Some(path) = path {
         let path = shellexpand::tilde(path).to_string();
         let metadata = fs::metadata(&path)?;
@@ -54,33 +54,34 @@ fn cd(args: &[&String]) -> Result<CommandResult, Box<dyn Error>> {
     Ok(CommandResult::UpdateCwd)
 }
 
-fn pwd() -> Result<CommandResult, Box<dyn Error>> {
+fn pwd(context: CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     queue!(stdout(), SetForegroundColor(colors::SECONDARY_COLOR))?;
-    println!(
+    writeln!(
+        context.stdout.lock(),
         "{}",
         std::env::current_dir()?
             .to_str()
             .ok_or(std::io::Error::other("Couldn't read path as string"))?
-    );
+    )?;
     Ok(CommandResult::Lovely)
 }
-fn echo(args: &Vec<&String>) -> Result<CommandResult, Box<dyn Error>> {
+fn echo(context: CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     queue!(stdout(), SetForegroundColor(Color::Reset))?;
-    for line in args {
-        println!("{}", line);
+    for line in context.args {
+        writeln!(context.stdout.lock(), "{}", line)?;
     }
     Ok(CommandResult::Lovely)
 }
-fn cls() -> Result<CommandResult, Box<dyn Error>> {
+fn cls(context: CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     execute!(
-        stdout(),
+        context.stdout.lock(),
         cursor::MoveTo(0, 0),
         terminal::Clear(terminal::ClearType::All)
     )?;
     Ok(CommandResult::Lovely)
 }
-fn cat(args: &[&String]) -> Result<CommandResult, Box<dyn Error>> {
-    let path = args.first();
+fn cat(context: CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+    let path = context.args.first();
     match path {
         Some(path) => {
             let mut file = fs::File::open(path)?;
@@ -88,32 +89,43 @@ fn cat(args: &[&String]) -> Result<CommandResult, Box<dyn Error>> {
             file.read_to_string(&mut buf)?;
 
             queue!(stdout(), SetForegroundColor(Color::Reset))?;
-            println!("{}", buf);
+            writeln!(context.stdout.lock(), "{}", buf)?;
         }
         None => {
-            println!("meow");
+            writeln!(context.stdout.lock(), "meow")?;
         }
     }
 
     Ok(CommandResult::Lovely)
 }
-fn help() -> Result<CommandResult, Box<dyn Error>> {
-    println!("{}", include_str!("help.txt"));
+fn help(context: CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+    writeln!(context.stdout.lock(), "{}", include_str!("help.txt"))?;
     Ok(CommandResult::Lovely)
 }
 
 pub fn execute_command(keyword: &str, args: &Vec<&String>) -> CommandResult {
+    let context = CommandContext {
+        args: args,
+        _stdin: stdin(),
+        stdout: stdout(),
+    };
     match keyword {
-        "ls" => handle_result(ls(args)),
-        "cd" => handle_result(cd(args)),
-        "pwd" => handle_result(pwd()),
-        "echo" => handle_result(echo(args)),
-        "cls" => handle_result(cls()),
-        "cat" => handle_result(cat(args)),
-        "help" => handle_result(help()),
+        "ls" => handle_result(ls(context)),
+        "cd" => handle_result(cd(context)),
+        "pwd" => handle_result(pwd(context)),
+        "echo" => handle_result(echo(context)),
+        "cls" => handle_result(cls(context)),
+        "cat" => handle_result(cat(context)),
+        "help" => handle_result(help(context)),
         "exit" => CommandResult::Exit,
         _ => CommandResult::NotACommand,
     }
+}
+
+pub struct CommandContext<'a> {
+    args: &'a Vec<&'a String>,
+    stdout: Stdout,
+    _stdin: Stdin,
 }
 
 pub enum CommandResult {
