@@ -150,14 +150,13 @@ impl Shoe {
             std::fs::read_to_string(&history_path).expect("Couldn't read ~/.shoehistory");
         let history: Vec<String> = history_text
             .split('\n')
-            .map(|line| {
+            .filter_map(|line| {
                 if line.trim().is_empty() {
                     None
                 } else {
                     Option::<String>::Some(line.to_string())
                 }
             })
-            .flatten()
             .collect();
 
         let history_index = history.len();
@@ -274,7 +273,7 @@ impl Shoe {
                     }
                 }
                 KeyCode::Up => {
-                    if self.history.len() > 0 {
+                    if !self.history.is_empty() {
                         if self.history_index > 0 {
                             self.history_index -= 1;
                         }
@@ -283,7 +282,7 @@ impl Shoe {
                     }
                 }
                 KeyCode::Down => {
-                    if self.history.len() > 0 {
+                    if !self.history.is_empty() {
                         if self.history_index < self.history.len() {
                             self.history_index += 1;
                         }
