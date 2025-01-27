@@ -15,6 +15,9 @@ mod colors;
 mod commands;
 
 struct Shoe {
+    history_path: String,
+    history: Vec<String>,
+    history_index: usize,
     running: bool,
     listening: bool,
     cwd: PathBuf,
@@ -142,8 +145,27 @@ fn replace_case_insensitive(source: String, pattern: String, replace: String) ->
 }
 
 impl Shoe {
-    fn new() -> Result<Self> {
+    fn new(history_path: String) -> Result<Self> {
+        let history_text =
+            std::fs::read_to_string(&history_path).expect("Couldn't read ~/.shoehistory");
+        let history: Vec<String> = history_text
+            .split('\n')
+            .map(|line| {
+                if line.trim().is_empty() {
+                    None
+                } else {
+                    Option::<String>::Some(line.to_string())
+                }
+            })
+            .flatten()
+            .collect();
+
+        let history_index = history.len();
+
         Ok(Shoe {
+            history_path,
+            history,
+            history_index,
             running: false,
             listening: false,
             cwd: std::env::current_dir()?,
@@ -235,6 +257,7 @@ impl Shoe {
                 }
                 KeyCode::Char(char) => {
                     if key_event.modifiers.contains(KeyModifiers::CONTROL) && char == 'c' {
+                        self.input_text = String::new();
                         self.listening = false;
                     } else {
                         self.write_char(char);
@@ -248,6 +271,29 @@ impl Shoe {
                     if self.cursor_pos > 0 {
                         self.cursor_pos -= 1;
                         self.delete_char();
+                    }
+                }
+                KeyCode::Up => {
+                    if self.history.len() > 0 {
+                        if self.history_index > 0 {
+                            self.history_index -= 1;
+                        }
+                        self.input_text = self.history[self.history_index].clone();
+                        self.cursor_pos = self.input_text.chars().count();
+                    }
+                }
+                KeyCode::Down => {
+                    if self.history.len() > 0 {
+                        if self.history_index < self.history.len() {
+                            self.history_index += 1;
+                        }
+                        if self.history_index < self.history.len() {
+                            self.input_text = self.history[self.history_index].clone();
+                            self.cursor_pos = self.input_text.chars().count();
+                        } else {
+                            self.input_text = String::new();
+                            self.cursor_pos = 0;
+                        }
                     }
                 }
                 KeyCode::Right => {
@@ -313,6 +359,19 @@ impl Shoe {
             if command.is_empty() {
                 continue;
             }
+            let mut should_store_history = true;
+            if let Some(last_input) = self.history.last() {
+                if last_input == command {
+                    should_store_history = false;
+                }
+            }
+
+            if should_store_history {
+                self.history.push(command.clone());
+                std::fs::write(&self.history_path, self.history.join("\n"))?;
+            }
+            self.history_index = self.history.len();
+
             let parts = parse_parts(command, false);
             let mut commands: Vec<VecDeque<CommandPart>> = vec![VecDeque::new()];
 
@@ -385,6 +444,11 @@ fn main() {
     print!("[v{}]\n\n", env!("CARGO_PKG_VERSION"));
     stdout().flush().unwrap();
 
-    let mut shoe = Shoe::new().unwrap();
+    let path = shellexpand::tilde("~/.shoehistory").to_string();
+    if std::fs::metadata(&path).is_err() {
+        std::fs::write(&path, "").expect("Couldn't create ~/.shoehistory");
+    }
+
+    let mut shoe = Shoe::new(path).unwrap();
     shoe.start().unwrap();
 }
