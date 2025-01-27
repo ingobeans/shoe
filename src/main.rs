@@ -356,6 +356,7 @@ impl Shoe {
         while self.running {
             let command = &self.listen()?;
             if command.is_empty() {
+                self.history_index = self.history.len();
                 continue;
             }
             let mut should_store_history = true;
