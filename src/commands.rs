@@ -32,13 +32,14 @@ fn ls(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
             Err(_) => Err(std::io::Error::other("Path name couldn't be read"))?,
         }
     }
-    queue!(stdout(), SetForegroundColor(colors::PRIMARY_COLOR))?;
+    let mut stdout = context.stdout.lock();
+    queue!(stdout, SetForegroundColor(colors::PRIMARY_COLOR))?;
     for dir in dirs {
-        writeln!(context.stdout.lock(), "{}", dir)?;
+        writeln!(stdout, "{}", dir)?;
     }
-    queue!(stdout(), SetForegroundColor(colors::SECONDARY_COLOR))?;
+    queue!(stdout, SetForegroundColor(colors::SECONDARY_COLOR))?;
     for dir in files {
-        writeln!(context.stdout.lock(), "{}", dir)?;
+        writeln!(stdout, "{}", dir)?;
     }
     Ok(CommandResult::Lovely)
 }
@@ -57,7 +58,10 @@ fn cd(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
 }
 
 fn pwd(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
-    queue!(stdout(), SetForegroundColor(colors::SECONDARY_COLOR))?;
+    queue!(
+        context.stdout.lock(),
+        SetForegroundColor(colors::SECONDARY_COLOR)
+    )?;
     writeln!(
         context.stdout.lock(),
         "{}",
@@ -68,7 +72,7 @@ fn pwd(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     Ok(CommandResult::Lovely)
 }
 fn echo(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
-    queue!(stdout(), SetForegroundColor(Color::Reset))?;
+    queue!(context.stdout.lock(), SetForegroundColor(Color::Reset))?;
     for line in context.args {
         writeln!(context.stdout.lock(), "{}", line)?;
     }
@@ -90,7 +94,7 @@ fn cat(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
             let mut buf = String::new();
             file.read_to_string(&mut buf)?;
 
-            queue!(stdout(), SetForegroundColor(Color::Reset))?;
+            queue!(context.stdout.lock(), SetForegroundColor(Color::Reset))?;
             writeln!(context.stdout.lock(), "{}", buf)?;
         }
         None => {
