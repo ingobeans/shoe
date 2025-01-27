@@ -3,6 +3,7 @@ use std::{
     error::Error,
     fs,
     io::{stdout, Read, Stdin, Stdout, Write},
+    path::Path,
 };
 
 use crossterm::{
@@ -103,6 +104,35 @@ fn help(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     writeln!(context.stdout.lock(), "{}", include_str!("help.txt"))?;
     Ok(CommandResult::Lovely)
 }
+fn cp(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+    if context.args.len() != 2 {
+        Err(std::io::Error::other("Usage: 'cp <source> <dest>'"))?;
+    }
+    let source = context.args[0];
+    let dest = context.args[1];
+
+    let source_is_file = fs::metadata(source)?.is_file();
+    if source_is_file {
+        std::fs::copy(source, dest)?;
+    } else {
+        copy_dir(source, dest)?;
+    }
+    Ok(CommandResult::Lovely)
+}
+fn mv(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+    if context.args.len() != 2 {
+        Err(std::io::Error::other("Usage: 'mv <source> <dest>'"))?;
+    }
+    cp(context)?;
+    let source = context.args[0];
+    let source_is_file = fs::metadata(source)?.is_file();
+    if source_is_file {
+        std::fs::remove_file(source)?;
+    } else {
+        std::fs::remove_dir_all(source)?;
+    }
+    Ok(CommandResult::Lovely)
+}
 
 pub fn execute_command(keyword: &str, context: &CommandContext) -> CommandResult {
     match keyword {
@@ -112,6 +142,8 @@ pub fn execute_command(keyword: &str, context: &CommandContext) -> CommandResult
         "echo" => handle_result(echo(context)),
         "cls" => handle_result(cls(context)),
         "cat" => handle_result(cat(context)),
+        "cp" => handle_result(cp(context)),
+        "mv" => handle_result(mv(context)),
         "help" => handle_result(help(context)),
         "exit" => CommandResult::Exit,
         _ => CommandResult::NotACommand,
@@ -141,4 +173,17 @@ pub fn handle_result(result: Result<CommandResult, Box<dyn Error>>) -> CommandRe
         }
         Ok(result) => result,
     }
+}
+
+fn copy_dir(source: impl AsRef<Path>, dest: impl AsRef<Path>) -> std::io::Result<()> {
+    fs::create_dir_all(&dest)?;
+    for item in fs::read_dir(source)?.flatten() {
+        let is_file = item.file_type()?.is_file();
+        if is_file {
+            fs::copy(item.path(), dest.as_ref().join(item.file_name()))?;
+        } else {
+            copy_dir(item.path(), dest.as_ref().join(item.file_name()))?;
+        }
+    }
+    Ok(())
 }

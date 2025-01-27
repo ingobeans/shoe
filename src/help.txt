@@ -4,5 +4,7 @@ pwd		print working dir
 echo		print text
 cls		clear console
 cat		print contents of file
+cp		copy file/dir
+mv		move file/dir
 help		print this
 exit		exit
