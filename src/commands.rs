@@ -150,6 +150,14 @@ fn rm(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     }
     Ok(CommandResult::Lovely)
 }
+fn mkdir(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+    if context.args.len() != 1 {
+        Err(std::io::Error::other("Usage: 'mkdir <path>'"))?;
+    }
+    let path = context.args[0];
+    fs::create_dir_all(path)?;
+    Ok(CommandResult::Lovely)
+}
 
 pub fn execute_command(keyword: &str, context: &CommandContext) -> CommandResult {
     match keyword {
@@ -163,6 +171,7 @@ pub fn execute_command(keyword: &str, context: &CommandContext) -> CommandResult
         "mv" => handle_result(mv(context)),
         "rm" => handle_result(rm(context)),
         "help" => handle_result(help(context)),
+        "mkdir" => handle_result(mkdir(context)),
         "exit" => CommandResult::Exit,
         _ => CommandResult::NotACommand,
     }
