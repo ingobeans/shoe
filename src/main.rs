@@ -8,8 +8,7 @@ use crossterm::{
 use std::{
     collections::VecDeque,
     io::{stdin, stdout, Result, Write},
-    iter,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process,
 };
 mod colors;
@@ -134,13 +133,52 @@ fn replace_case_insensitive(source: String, pattern: String, replace: String) ->
     }
 }
 
-fn list_dir(dir: &PathBuf) -> Result<Vec<String>> {
+fn list_dir(dir: &Path) -> Result<Vec<String>> {
     let contents = std::fs::read_dir(dir)?;
     let contents = contents
         .flatten()
         .map(|item| item.file_name().to_string_lossy().to_string())
         .collect();
     Ok(contents)
+}
+
+/// Great function I won't let anyone tell me otherwise
+fn pathbuf_to_string(input: PathBuf) -> String {
+    let mut parts: Vec<String> = vec![];
+    let last_is_dir = input.is_dir();
+    for ancestor in input.ancestors() {
+        let name = ancestor.file_name();
+        if let Some(name) = name {
+            parts.push(name.to_string_lossy().to_string())
+        }
+    }
+    parts.reverse();
+    parts.join("/") + if last_is_dir { "/" } else { "" }
+}
+
+fn autocomplete(current_word: String) -> Option<String> {
+    let path = PathBuf::from(&current_word);
+    if let Some(file_name) = path.file_name() {
+        if let Some(file_name) = file_name.to_str() {
+            let mut directory_path = PathBuf::from(".");
+            if let Some(directory) = path.parent() {
+                if !directory.to_string_lossy().is_empty() {
+                    directory_path = directory.into();
+                }
+            }
+
+            let contents = list_dir(&directory_path);
+            if let Ok(contents) = contents {
+                for item in contents {
+                    if item.starts_with(file_name) {
+                        let new = pathbuf_to_string(directory_path.join(item));
+                        return Some(new);
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 struct Shoe {
@@ -195,17 +233,6 @@ impl Shoe {
             .to_string();
         let home_path = shellexpand::tilde("~").to_string();
         Ok(replace_case_insensitive(path, home_path, "~".to_string()))
-    }
-    fn autocomplete(&self) -> Option<String> {
-        let current_word = self.input_text.split(" ").last();
-        if let Some(current_word) = current_word {
-            for item in &self.current_dir_contents {
-                if item.starts_with(current_word) {
-                    return Some(item.clone());
-                }
-            }
-        }
-        None
     }
     fn update_cwd(&mut self) -> Result<()> {
         self.cwd = std::env::current_dir()?;
@@ -293,20 +320,24 @@ impl Shoe {
                 }
                 KeyCode::Tab => {
                     if !self.input_text.is_empty() {
-                        let autocompleted = self.autocomplete();
-                        if let Some(autocompleted) = autocompleted {
-                            let mut new = String::new();
-                            let mut iterator = self.input_text.split(" ").peekable();
-                            while let Some(word) = iterator.next() {
-                                if iterator.peek().is_some() {
-                                    new += word;
-                                    new += " ";
-                                } else {
-                                    new += &autocompleted;
+                        let words = parse_parts(&self.input_text, false);
+                        let last_word = words.iter().last();
+                        if let Some(last_word) = last_word {
+                            let autocompleted = autocomplete(last_word.text.clone());
+                            if let Some(autocompleted) = autocompleted {
+                                let mut new = String::new();
+                                let mut iterator = self.input_text.split(" ").peekable();
+                                while let Some(word) = iterator.next() {
+                                    if iterator.peek().is_some() {
+                                        new += word;
+                                        new += " ";
+                                    } else {
+                                        new += &autocompleted;
+                                    }
                                 }
+                                self.cursor_pos = new.chars().count();
+                                self.input_text = new;
                             }
-                            self.cursor_pos = new.chars().count();
-                            self.input_text = new;
                         }
                     }
                 }
