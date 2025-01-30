@@ -6,5 +6,6 @@ cls		clear console
 cat		print contents of file
 cp		copy file/dir
 mv		move file/dir
+rm		delete file/dir
 help		print this
 exit		exit

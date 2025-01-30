@@ -137,6 +137,19 @@ fn mv(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     }
     Ok(CommandResult::Lovely)
 }
+fn rm(context: &CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+    if context.args.len() != 1 {
+        Err(std::io::Error::other("Usage: 'rm <target>'"))?;
+    }
+    let target = context.args[0];
+    let target_is_file = fs::metadata(target)?.is_file();
+    if target_is_file {
+        std::fs::remove_file(target)?;
+    } else {
+        std::fs::remove_dir_all(target)?;
+    }
+    Ok(CommandResult::Lovely)
+}
 
 pub fn execute_command(keyword: &str, context: &CommandContext) -> CommandResult {
     match keyword {
@@ -148,6 +161,7 @@ pub fn execute_command(keyword: &str, context: &CommandContext) -> CommandResult
         "cat" => handle_result(cat(context)),
         "cp" => handle_result(cp(context)),
         "mv" => handle_result(mv(context)),
+        "rm" => handle_result(rm(context)),
         "help" => handle_result(help(context)),
         "exit" => CommandResult::Exit,
         _ => CommandResult::NotACommand,
