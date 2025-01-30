@@ -8,22 +8,12 @@ use crossterm::{
 use std::{
     collections::VecDeque,
     io::{stdin, stdout, Result, Write},
+    iter,
     path::PathBuf,
     process,
 };
 mod colors;
 mod commands;
-
-struct Shoe {
-    history_path: String,
-    history: Vec<String>,
-    history_index: usize,
-    running: bool,
-    listening: bool,
-    cwd: PathBuf,
-    input_text: String,
-    cursor_pos: usize,
-}
 
 /// Function parse line to arguments, with support for quote enclosures
 ///
@@ -144,6 +134,27 @@ fn replace_case_insensitive(source: String, pattern: String, replace: String) ->
     }
 }
 
+fn list_dir(dir: &PathBuf) -> Result<Vec<String>> {
+    let contents = std::fs::read_dir(dir)?;
+    let contents = contents
+        .flatten()
+        .map(|item| item.file_name().to_string_lossy().to_string())
+        .collect();
+    Ok(contents)
+}
+
+struct Shoe {
+    history_path: String,
+    history: Vec<String>,
+    history_index: usize,
+    running: bool,
+    listening: bool,
+    cwd: PathBuf,
+    input_text: String,
+    cursor_pos: usize,
+    current_dir_contents: Vec<String>,
+}
+
 impl Shoe {
     fn new(history_path: String) -> Result<Self> {
         let history_text =
@@ -160,6 +171,8 @@ impl Shoe {
             .collect();
 
         let history_index = history.len();
+        let cwd = std::env::current_dir()?;
+        let current_dir_contents = list_dir(&cwd)?;
 
         Ok(Shoe {
             history_path,
@@ -167,9 +180,10 @@ impl Shoe {
             history_index,
             running: false,
             listening: false,
-            cwd: std::env::current_dir()?,
+            cwd,
             input_text: String::new(),
             cursor_pos: 0,
+            current_dir_contents,
         })
     }
     /// Convert cwd to a string, also replacing home path with ~
@@ -181,6 +195,22 @@ impl Shoe {
             .to_string();
         let home_path = shellexpand::tilde("~").to_string();
         Ok(replace_case_insensitive(path, home_path, "~".to_string()))
+    }
+    fn autocomplete(&self) -> Option<String> {
+        let current_word = self.input_text.split(" ").last();
+        if let Some(current_word) = current_word {
+            for item in &self.current_dir_contents {
+                if item.starts_with(current_word) {
+                    return Some(item.clone());
+                }
+            }
+        }
+        None
+    }
+    fn update_cwd(&mut self) -> Result<()> {
+        self.cwd = std::env::current_dir()?;
+        self.current_dir_contents = list_dir(&self.cwd)?;
+        Ok(())
     }
     fn execute_command(
         &mut self,
@@ -194,9 +224,7 @@ impl Shoe {
                 self.listening = false;
                 self.running = false;
             }
-            commands::CommandResult::UpdateCwd => {
-                self.cwd = std::env::current_dir()?;
-            }
+            commands::CommandResult::UpdateCwd => self.update_cwd()?,
             _ => {}
         }
         if !matches!(result, commands::CommandResult::NotACommand) {
@@ -261,6 +289,25 @@ impl Shoe {
                     } else {
                         self.write_char(char);
                         self.cursor_pos += 1;
+                    }
+                }
+                KeyCode::Tab => {
+                    if !self.input_text.is_empty() {
+                        let autocompleted = self.autocomplete();
+                        if let Some(autocompleted) = autocompleted {
+                            let mut new = String::new();
+                            let mut iterator = self.input_text.split(" ").peekable();
+                            while let Some(word) = iterator.next() {
+                                if iterator.peek().is_some() {
+                                    new += word;
+                                    new += " ";
+                                } else {
+                                    new += &autocompleted;
+                                }
+                            }
+                            self.cursor_pos = new.chars().count();
+                            self.input_text = new;
+                        }
                     }
                 }
                 KeyCode::Delete => {
