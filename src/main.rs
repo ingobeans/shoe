@@ -144,7 +144,7 @@ fn list_dir(dir: &Path) -> Result<Vec<String>> {
 }
 
 /// Autocomplete an input word to a relative path
-fn autocomplete(current_word: String) -> Option<String> {
+fn autocomplete(current_word: String) -> Option<RelativePathBuf> {
     let path = RelativePathBuf::from(&current_word);
     let cwd = std::env::current_dir().ok()?;
     let file_name = path.file_name()?;
@@ -158,8 +158,7 @@ fn autocomplete(current_word: String) -> Option<String> {
 
     for item in contents {
         if item.starts_with(file_name) {
-            let new = relative_parent.join(item).to_string();
-            return Some(new);
+            return Some(relative_parent.join(item));
         }
     }
 
@@ -317,7 +316,11 @@ impl Shoe {
                                         new += word;
                                         new += " ";
                                     } else {
-                                        new += &autocompleted;
+                                        let mut str = autocompleted.to_string();
+                                        if autocompleted.to_logical_path(&self.cwd).is_dir() {
+                                            str += "/";
+                                        }
+                                        new += &str;
                                     }
                                 }
                                 self.cursor_pos = new.chars().count();
