@@ -52,13 +52,10 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
             if include_seperators {
                 last.text.insert(last.text.len(), char);
             }
-            if !last.text.trim().is_empty() || matches!(last.part_type, CommandPartType::QuotesArg)
-            {
-                parts.push_back(CommandPart {
-                    text: String::new(),
-                    part_type: CommandPartType::RegularArg,
-                });
-            }
+            parts.push_back(CommandPart {
+                text: String::new(),
+                part_type: CommandPartType::RegularArg,
+            });
             last_char_was_backslash = false;
             continue;
         }
@@ -144,7 +141,7 @@ fn list_dir(dir: &Path) -> Result<Vec<String>> {
 }
 
 /// Autocomplete an input word to a relative path
-fn autocomplete(current_word: String) -> Option<RelativePathBuf> {
+fn autocomplete(current_word: &String) -> Option<RelativePathBuf> {
     let path = RelativePathBuf::from(&current_word);
     let cwd = std::env::current_dir().ok()?;
     let file_name = path.file_name()?;
@@ -284,6 +281,18 @@ impl Shoe {
         }
         self.input_text = new;
     }
+    fn get_word_at_cursor(&self) -> Option<(usize, CommandPart)> {
+        let mut counter = 0;
+        let mut index = 0;
+        for part in parse_parts(&self.input_text, false) {
+            counter += part.text.chars().count() + 1;
+            if counter >= self.cursor_pos {
+                return Some((index, part));
+            }
+            index += 1;
+        }
+        None
+    }
     fn handle_key_press(&mut self, event: Event) -> Result<()> {
         if let Event::Key(key_event) = event {
             if key_event.kind != KeyEventKind::Press {
@@ -302,47 +311,52 @@ impl Shoe {
                         self.cursor_pos += 1;
                     }
                 }
-                KeyCode::Tab => {
+                KeyCode::Tab => 'tab: {
                     if !self.input_text.is_empty() {
                         let mut words = parse_parts(&self.input_text, true);
-                        let last_word = words.pop_back();
-                        let mut ends_with_quote = false;
-                        if let Some(last_word) = last_word {
-                            let last_word_string: String;
-                            if matches!(last_word.part_type, CommandPartType::QuotesArg) {
-                                if last_word.text.ends_with('"') {
-                                    ends_with_quote = true;
-                                }
-                                last_word_string = last_word.text.trim_matches('"').to_string();
-                            } else {
-                                last_word_string = last_word.text.to_string();
-                            }
-                            let autocompleted = autocomplete(last_word_string);
-                            if let Some(autocompleted) = autocompleted {
-                                let mut new = String::new();
-                                for word in words {
-                                    new += &word.text;
-                                }
-                                let mut str = autocompleted.to_string();
-                                if autocompleted.to_logical_path(&self.cwd).is_dir() {
-                                    str += "/";
-                                }
-                                if matches!(last_word.part_type, CommandPartType::QuotesArg)
-                                    && ends_with_quote
-                                {
-                                    str = format!("\"{}\"", str);
-                                } else if str.contains(' ')
-                                    || matches!(last_word.part_type, CommandPartType::QuotesArg)
-                                {
-                                    str = String::from("\"") + &str;
-                                }
-                                new += &str;
-
-                                self.cursor_pos =
-                                    new.chars().count() - if ends_with_quote { 1 } else { 0 };
-                                self.input_text = new;
+                        let Some((word_index, word)) = self.get_word_at_cursor() else {
+                            break 'tab;
+                        };
+                        let ends_with_quote =
+                            matches!(words[word_index].part_type, CommandPartType::QuotesArg)
+                                && words[word_index].text.ends_with('"');
+                        let starts_with_quote =
+                            matches!(words[word_index].part_type, CommandPartType::QuotesArg);
+                        let ends_with_space = words[word_index].text.ends_with(' ');
+                        words.remove(word_index);
+                        let autocompletion = autocomplete(&word.text);
+                        let Some(autocompletion) = autocompletion else {
+                            break 'tab;
+                        };
+                        let mut new = String::new();
+                        let mut autocompletion_string = autocompletion.to_string();
+                        if autocompletion_string.contains(' ') && !starts_with_quote {
+                            autocompletion_string = String::from("\"") + &autocompletion_string;
+                            if word_index == words.len() - 1 {
+                                autocompletion_string += "\"";
                             }
                         }
+                        self.cursor_pos +=
+                            autocompletion_string.chars().count() - word.text.chars().count();
+                        if starts_with_quote {
+                            autocompletion_string = String::from("\"") + &autocompletion_string;
+                        }
+                        if ends_with_quote {
+                            autocompletion_string += "\"";
+                        }
+                        if ends_with_space {
+                            autocompletion_string += " ";
+                        }
+                        for (index, word) in words.iter().enumerate() {
+                            if word_index == index {
+                                new += &autocompletion_string;
+                            }
+                            new += &word.text;
+                        }
+                        if word_index == words.len() {
+                            new += &autocompletion_string;
+                        }
+                        self.input_text = new;
                     }
                 }
                 KeyCode::Delete => {
