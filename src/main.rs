@@ -320,6 +320,9 @@ impl Shoe {
                                         if autocompleted.to_logical_path(&self.cwd).is_dir() {
                                             str += "/";
                                         }
+                                        if str.contains(' ') {
+                                            str = format!("\"{}\"", str);
+                                        }
                                         new += &str;
                                     }
                                 }
