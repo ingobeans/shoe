@@ -144,30 +144,22 @@ fn list_dir(dir: &Path) -> Result<Vec<String>> {
 }
 
 /// Autocomplete an input word to a relative path
-/// 
-/// It's horrible but works.
-/// TODO: make this not have 100 levels of indent
 fn autocomplete(current_word: String) -> Option<String> {
     let path = RelativePathBuf::from(&current_word);
-    let cwd = std::env::current_dir();
-    if let Ok(cwd) = cwd {
-        if let Some(file_name) = path.file_name() {
-            let real = &path.to_logical_path(&cwd);
-            let real_parent = real.parent();
-            if let Some(real_parent) = real_parent {
-                let relative_parent = path.parent();
-                if let Some(relative_parent) = relative_parent {
-                    let contents = list_dir(real_parent);
-                    if let Ok(contents) = contents {
-                        for item in contents {
-                            if item.starts_with(file_name) {
-                                let new = relative_parent.join(item).to_string();
-                                return Some(new);
-                            }
-                        }
-                    }
-                }
-            }
+    let cwd = std::env::current_dir().ok()?;
+    let file_name = path.file_name()?;
+
+    let absolute = &path.to_logical_path(&cwd);
+    let absolute_parent = absolute.parent()?;
+
+    let relative_parent = path.parent()?;
+
+    let contents = list_dir(absolute_parent).ok()?;
+
+    for item in contents {
+        if item.starts_with(file_name) {
+            let new = relative_parent.join(item).to_string();
+            return Some(new);
         }
     }
 
