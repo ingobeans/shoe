@@ -343,6 +343,9 @@ impl Shoe {
                     };
                     let mut new = String::new();
                     let mut autocompletion_string = autocompletion.to_string();
+                    if autocompletion.to_logical_path(&self.cwd).is_dir() {
+                        autocompletion_string += "/";
+                    }
                     if autocompletion_string.contains(' ') && !starts_with_quote {
                         autocompletion_string = String::from("\"") + &autocompletion_string;
                         if word_index != words.len() {
