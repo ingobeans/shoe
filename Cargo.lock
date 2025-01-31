@@ -205,6 +205,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "relative-path"
+version = "1.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba39f3699c378cd8970968dcbff9c43159ea4cfbd88d43c00b22f2ef10a435d2"
+
+[[package]]
 name = "rustix"
 version = "0.38.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -234,9 +240,10 @@ dependencies = [
 
 [[package]]
 name = "shoe"
-version = "0.6.7"
+version = "0.6.8"
 dependencies = [
  "crossterm",
+ "relative-path",
  "shellexpand",
 ]
 

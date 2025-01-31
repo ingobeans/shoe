@@ -5,6 +5,7 @@ use crossterm::{
     style::{Color, SetForegroundColor},
     terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
 };
+use relative_path::RelativePathBuf;
 use std::{
     collections::VecDeque,
     io::{stdin, stdout, Result, Write},
@@ -142,42 +143,34 @@ fn list_dir(dir: &Path) -> Result<Vec<String>> {
     Ok(contents)
 }
 
-/// Great function I won't let anyone tell me otherwise
-fn pathbuf_to_string(input: PathBuf) -> String {
-    let mut parts: Vec<String> = vec![];
-    let last_is_dir = input.is_dir();
-    for ancestor in input.ancestors() {
-        let name = ancestor.file_name();
-        if let Some(name) = name {
-            parts.push(name.to_string_lossy().to_string())
-        }
-    }
-    parts.reverse();
-    parts.join("/") + if last_is_dir { "/" } else { "" }
-}
-
+/// Autocomplete an input word to a relative path
+/// 
+/// It's horrible but works.
+/// TODO: make this not have 100 levels of indent
 fn autocomplete(current_word: String) -> Option<String> {
-    let path = PathBuf::from(&current_word);
-    if let Some(file_name) = path.file_name() {
-        if let Some(file_name) = file_name.to_str() {
-            let mut directory_path = PathBuf::from(".");
-            if let Some(directory) = path.parent() {
-                if !directory.to_string_lossy().is_empty() {
-                    directory_path = directory.into();
-                }
-            }
-
-            let contents = list_dir(&directory_path);
-            if let Ok(contents) = contents {
-                for item in contents {
-                    if item.starts_with(file_name) {
-                        let new = pathbuf_to_string(directory_path.join(item));
-                        return Some(new);
+    let path = RelativePathBuf::from(&current_word);
+    let cwd = std::env::current_dir();
+    if let Ok(cwd) = cwd {
+        if let Some(file_name) = path.file_name() {
+            let real = &path.to_logical_path(&cwd);
+            let real_parent = real.parent();
+            if let Some(real_parent) = real_parent {
+                let relative_parent = path.parent();
+                if let Some(relative_parent) = relative_parent {
+                    let contents = list_dir(real_parent);
+                    if let Ok(contents) = contents {
+                        for item in contents {
+                            if item.starts_with(file_name) {
+                                let new = relative_parent.join(item).to_string();
+                                return Some(new);
+                            }
+                        }
                     }
                 }
             }
         }
     }
+
     None
 }
 

@@ -1,8 +1,9 @@
 [package]
 name = "shoe"
-version = "0.6.7"
+version = "0.6.8"
 edition = "2021"
 
 [dependencies]
 crossterm = "0.28.1"
+relative-path = "1.9.3"
 shellexpand = "3.1.0"
