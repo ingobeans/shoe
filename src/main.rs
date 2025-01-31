@@ -304,29 +304,42 @@ impl Shoe {
                 }
                 KeyCode::Tab => {
                     if !self.input_text.is_empty() {
-                        let words = parse_parts(&self.input_text, false);
-                        let last_word = words.iter().last();
+                        let mut words = parse_parts(&self.input_text, true);
+                        let last_word = words.pop_back();
+                        let mut ends_with_quote = false;
                         if let Some(last_word) = last_word {
-                            let autocompleted = autocomplete(last_word.text.clone());
+                            let last_word_string: String;
+                            if matches!(last_word.part_type, CommandPartType::QuotesArg) {
+                                if last_word.text.ends_with('"') {
+                                    ends_with_quote = true;
+                                }
+                                last_word_string = last_word.text.trim_matches('"').to_string();
+                            } else {
+                                last_word_string = last_word.text.to_string();
+                            }
+                            let autocompleted = autocomplete(last_word_string);
                             if let Some(autocompleted) = autocompleted {
                                 let mut new = String::new();
-                                let mut iterator = self.input_text.split(" ").peekable();
-                                while let Some(word) = iterator.next() {
-                                    if iterator.peek().is_some() {
-                                        new += word;
-                                        new += " ";
-                                    } else {
-                                        let mut str = autocompleted.to_string();
-                                        if autocompleted.to_logical_path(&self.cwd).is_dir() {
-                                            str += "/";
-                                        }
-                                        if str.contains(' ') {
-                                            str = format!("\"{}\"", str);
-                                        }
-                                        new += &str;
-                                    }
+                                for word in words {
+                                    new += &word.text;
                                 }
-                                self.cursor_pos = new.chars().count();
+                                let mut str = autocompleted.to_string();
+                                if autocompleted.to_logical_path(&self.cwd).is_dir() {
+                                    str += "/";
+                                }
+                                if matches!(last_word.part_type, CommandPartType::QuotesArg)
+                                    && ends_with_quote
+                                {
+                                    str = format!("\"{}\"", str);
+                                } else if str.contains(' ')
+                                    || matches!(last_word.part_type, CommandPartType::QuotesArg)
+                                {
+                                    str = String::from("\"") + &str;
+                                }
+                                new += &str;
+
+                                self.cursor_pos =
+                                    new.chars().count() - if ends_with_quote { 1 } else { 0 };
                                 self.input_text = new;
                             }
                         }
