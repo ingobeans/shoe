@@ -86,6 +86,17 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
     parts
 }
 
+fn remove_empty_parts(parts: VecDeque<CommandPart>) -> VecDeque<CommandPart> {
+    let mut new = VecDeque::new();
+    for part in parts {
+        if part.text.is_empty() && !matches!(part.part_type, CommandPartType::QuotesArg) {
+        } else {
+            new.push_back(part);
+        }
+    }
+    new
+}
+
 /// Replace substring in string (non case sensitive!!)
 fn replace_case_insensitive(source: String, pattern: String, replace: String) -> String {
     let mut pattern_index = 0;
@@ -468,7 +479,7 @@ impl Shoe {
             }
             self.history_index = self.history.len();
 
-            let parts = parse_parts(command, false);
+            let parts = remove_empty_parts(parse_parts(command, false));
             let mut commands: Vec<VecDeque<CommandPart>> = vec![VecDeque::new()];
 
             for part in parts {

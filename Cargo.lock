@@ -240,7 +240,7 @@ dependencies = [
 
 [[package]]
 name = "shoe"
-version = "0.6.13"
+version = "0.6.14"
 dependencies = [
  "crossterm",
  "relative-path",
