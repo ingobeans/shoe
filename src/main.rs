@@ -294,13 +294,11 @@ impl Shoe {
     }
     fn get_word_at_cursor(&self) -> Option<(usize, CommandPart)> {
         let mut counter = 0;
-        let mut index = 0;
-        for part in parse_parts(&self.input_text, false) {
+        for (index, part) in parse_parts(&self.input_text, false).into_iter().enumerate() {
             counter += part.text.chars().count() + 1;
             if counter >= self.cursor_pos {
                 return Some((index, part));
             }
-            index += 1;
         }
         None
     }
@@ -341,7 +339,6 @@ impl Shoe {
                     let Some(autocompletion) = autocompletion else {
                         break 'tab;
                     };
-                    let mut new = String::new();
                     let mut autocompletion_string = autocompletion.to_string();
                     if autocompletion.to_logical_path(&self.cwd).is_dir() {
                         autocompletion_string += "/";
@@ -363,6 +360,7 @@ impl Shoe {
                     if ends_with_space {
                         autocompletion_string += " ";
                     }
+                    let mut new = String::new();
                     for (index, word) in words.iter().enumerate() {
                         if word_index == index {
                             new += &autocompletion_string;
