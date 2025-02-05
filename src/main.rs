@@ -153,8 +153,29 @@ fn list_dir(dir: &Path) -> Result<Vec<String>> {
     Ok(contents)
 }
 
+enum AbsoluteOrRelativePathBuf {
+    Relative(RelativePathBuf),
+    Absolute(PathBuf),
+}
+
 /// Autocomplete an input word to a relative path
-fn autocomplete(current_word: &String) -> Option<RelativePathBuf> {
+fn autocomplete(current_word: &String) -> Option<AbsoluteOrRelativePathBuf> {
+    // check if is absolute
+    let path = PathBuf::from(&current_word);
+    if path.is_absolute() {
+        let file_name = path.file_name()?.to_string_lossy().to_string();
+        let absolute_parent = path.parent()?;
+        let contents = list_dir(absolute_parent).ok()?;
+
+        for item in contents {
+            if item.starts_with(&file_name) {
+                return Some(AbsoluteOrRelativePathBuf::Absolute(
+                    absolute_parent.join(item),
+                ));
+            }
+        }
+        return None;
+    }
     let path = RelativePathBuf::from(&current_word);
     let cwd = std::env::current_dir().ok()?;
     let file_name = path.file_name()?;
@@ -168,11 +189,29 @@ fn autocomplete(current_word: &String) -> Option<RelativePathBuf> {
 
     for item in contents {
         if item.starts_with(file_name) {
-            return Some(relative_parent.join(item));
+            return Some(AbsoluteOrRelativePathBuf::Relative(
+                relative_parent.join(item),
+            ));
         }
     }
 
     None
+}
+
+fn absolute_pathbuf_to_string(input: PathBuf) -> String {
+    let mut parts: Vec<String> = vec![];
+    for component in input.components() {
+        match component {
+            std::path::Component::Normal(path) => {
+                parts.push(path.to_string_lossy().to_string());
+            }
+            std::path::Component::Prefix(prefix_component) => {
+                parts.push(prefix_component.as_os_str().to_string_lossy().to_string());
+            }
+            _ => {}
+        };
+    }
+    parts.join("/")
 }
 
 struct Shoe {
@@ -360,8 +399,19 @@ impl Shoe {
                     let Some(autocompletion) = autocompletion else {
                         break 'tab;
                     };
-                    let mut autocompletion_string = autocompletion.to_string();
-                    if autocompletion.to_logical_path(&self.cwd).is_dir() {
+                    let autocompletion_is_dir: bool;
+                    let mut autocompletion_string: String;
+                    match autocompletion {
+                        AbsoluteOrRelativePathBuf::Relative(relative) => {
+                            autocompletion_string = relative.to_string();
+                            autocompletion_is_dir = relative.to_logical_path(&self.cwd).is_dir();
+                        }
+                        AbsoluteOrRelativePathBuf::Absolute(absolute) => {
+                            autocompletion_is_dir = absolute.is_dir();
+                            autocompletion_string = absolute_pathbuf_to_string(absolute);
+                        }
+                    }
+                    if autocompletion_is_dir {
                         autocompletion_string += "/";
                     }
                     if autocompletion_string.contains(' ') && !starts_with_quote {
