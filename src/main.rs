@@ -162,12 +162,20 @@ fn autocomplete(current_word: &String) -> Option<AbsoluteOrRelativePathBuf> {
     // check if is absolute
     let path = PathBuf::from(&current_word);
     if path.is_absolute() {
-        let file_name = path.file_name()?.to_string_lossy().to_string();
+        let mut file_name = path.file_name()?.to_string_lossy().to_string();
         let absolute_parent = path.parent()?;
         let contents = list_dir(absolute_parent).ok()?;
 
+        if env::consts::OS == "windows" {
+            file_name = file_name.to_lowercase()
+        };
         for item in contents {
-            if item.starts_with(&file_name) {
+            let item_in_maybe_lowercase = if env::consts::OS == "windows" {
+                item.to_lowercase()
+            } else {
+                item.clone()
+            };
+            if item_in_maybe_lowercase.starts_with(&file_name) {
                 return Some(AbsoluteOrRelativePathBuf::Absolute(
                     absolute_parent.join(item),
                 ));
@@ -177,7 +185,11 @@ fn autocomplete(current_word: &String) -> Option<AbsoluteOrRelativePathBuf> {
     }
     let path = RelativePathBuf::from(&current_word);
     let cwd = std::env::current_dir().ok()?;
-    let file_name = path.file_name()?;
+    let file_name = if env::consts::OS == "windows" {
+        path.file_name()?.to_lowercase()
+    } else {
+        path.file_name()?.to_string()
+    };
 
     let absolute = &path.to_logical_path(&cwd);
     let absolute_parent = absolute.parent()?;
@@ -187,7 +199,12 @@ fn autocomplete(current_word: &String) -> Option<AbsoluteOrRelativePathBuf> {
     let contents = list_dir(absolute_parent).ok()?;
 
     for item in contents {
-        if item.starts_with(file_name) {
+        let item_in_maybe_lowercase = if env::consts::OS == "windows" {
+            item.to_lowercase()
+        } else {
+            item.clone()
+        };
+        if item_in_maybe_lowercase.starts_with(&file_name) {
             return Some(AbsoluteOrRelativePathBuf::Relative(
                 relative_parent.join(item),
             ));
