@@ -159,6 +159,7 @@ enum AbsoluteOrRelativePathBuf {
 
 /// Autocomplete an input word to a relative path
 fn autocomplete(current_word: &String, mut item_index: usize) -> Option<AbsoluteOrRelativePathBuf> {
+    let mut valid: Vec<AbsoluteOrRelativePathBuf> = Vec::new();
     // check if is absolute
     let path = PathBuf::from(&current_word);
     if path.is_absolute() {
@@ -169,7 +170,6 @@ fn autocomplete(current_word: &String, mut item_index: usize) -> Option<Absolute
         if env::consts::OS == "windows" {
             file_name = file_name.to_lowercase()
         };
-        let mut valid = Vec::new();
         for item in contents {
             let item_in_maybe_lowercase = if env::consts::OS == "windows" {
                 item.to_lowercase()
@@ -177,47 +177,46 @@ fn autocomplete(current_word: &String, mut item_index: usize) -> Option<Absolute
                 item.clone()
             };
             if item_in_maybe_lowercase.starts_with(&file_name) {
-                valid.push(item);
+                valid.push(AbsoluteOrRelativePathBuf::Absolute(
+                    absolute_parent.join(item),
+                ));
             }
         }
-        if valid.len() != 0 {
-            item_index = item_index % valid.len();
-            return Some(AbsoluteOrRelativePathBuf::Absolute(
-                absolute_parent.join(valid[item_index].to_string()),
-            ));
-        }
-        return None;
-    }
-    let path = RelativePathBuf::from(&current_word);
-    let cwd = std::env::current_dir().ok()?;
-    let file_name = if env::consts::OS == "windows" {
-        path.file_name()?.to_lowercase()
     } else {
-        path.file_name()?.to_string()
-    };
-
-    let absolute = &path.to_logical_path(&cwd);
-    let absolute_parent = absolute.parent()?;
-
-    let relative_parent = path.parent()?;
-
-    let contents = list_dir(absolute_parent).ok()?;
-    let mut valid = Vec::new();
-    for item in contents {
-        let item_in_maybe_lowercase = if env::consts::OS == "windows" {
-            item.to_lowercase()
+        let path = RelativePathBuf::from(&current_word);
+        let cwd = std::env::current_dir().ok()?;
+        let file_name = if env::consts::OS == "windows" {
+            path.file_name()?.to_lowercase()
         } else {
-            item.clone()
+            path.file_name()?.to_string()
         };
-        if item_in_maybe_lowercase.starts_with(&file_name) {
-            valid.push(item);
+
+        let absolute = &path.to_logical_path(&cwd);
+        let absolute_parent = absolute.parent()?;
+
+        let relative_parent = path.parent()?;
+
+        let contents = list_dir(absolute_parent).ok()?;
+        for item in contents {
+            let item_in_maybe_lowercase = if env::consts::OS == "windows" {
+                item.to_lowercase()
+            } else {
+                item.clone()
+            };
+            if item_in_maybe_lowercase.starts_with(&file_name) {
+                valid.push(AbsoluteOrRelativePathBuf::Relative(
+                    relative_parent.join(item),
+                ));
+            }
         }
     }
-    if valid.len() != 0 {
-        item_index = item_index % valid.len();
-        return Some(AbsoluteOrRelativePathBuf::Relative(
-            relative_parent.join(valid[item_index].to_string()),
-        ));
+    if !valid.is_empty() {
+        item_index %= valid.len();
+        for (index, item) in valid.into_iter().enumerate() {
+            if index == item_index {
+                return Some(item);
+            }
+        }
     }
 
     None
