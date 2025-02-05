@@ -158,7 +158,7 @@ enum AbsoluteOrRelativePathBuf {
 }
 
 /// Autocomplete an input word to a relative path
-fn autocomplete(current_word: &String) -> Option<AbsoluteOrRelativePathBuf> {
+fn autocomplete(current_word: &String, mut item_index: usize) -> Option<AbsoluteOrRelativePathBuf> {
     // check if is absolute
     let path = PathBuf::from(&current_word);
     if path.is_absolute() {
@@ -169,6 +169,7 @@ fn autocomplete(current_word: &String) -> Option<AbsoluteOrRelativePathBuf> {
         if env::consts::OS == "windows" {
             file_name = file_name.to_lowercase()
         };
+        let mut valid = Vec::new();
         for item in contents {
             let item_in_maybe_lowercase = if env::consts::OS == "windows" {
                 item.to_lowercase()
@@ -176,10 +177,14 @@ fn autocomplete(current_word: &String) -> Option<AbsoluteOrRelativePathBuf> {
                 item.clone()
             };
             if item_in_maybe_lowercase.starts_with(&file_name) {
-                return Some(AbsoluteOrRelativePathBuf::Absolute(
-                    absolute_parent.join(item),
-                ));
+                valid.push(item);
             }
+        }
+        if valid.len() != 0 {
+            item_index = item_index % valid.len();
+            return Some(AbsoluteOrRelativePathBuf::Absolute(
+                absolute_parent.join(valid[item_index].to_string()),
+            ));
         }
         return None;
     }
@@ -197,7 +202,7 @@ fn autocomplete(current_word: &String) -> Option<AbsoluteOrRelativePathBuf> {
     let relative_parent = path.parent()?;
 
     let contents = list_dir(absolute_parent).ok()?;
-
+    let mut valid = Vec::new();
     for item in contents {
         let item_in_maybe_lowercase = if env::consts::OS == "windows" {
             item.to_lowercase()
@@ -205,10 +210,14 @@ fn autocomplete(current_word: &String) -> Option<AbsoluteOrRelativePathBuf> {
             item.clone()
         };
         if item_in_maybe_lowercase.starts_with(&file_name) {
-            return Some(AbsoluteOrRelativePathBuf::Relative(
-                relative_parent.join(item),
-            ));
+            valid.push(item);
         }
+    }
+    if valid.len() != 0 {
+        item_index = item_index % valid.len();
+        return Some(AbsoluteOrRelativePathBuf::Relative(
+            relative_parent.join(valid[item_index].to_string()),
+        ));
     }
 
     None
@@ -240,6 +249,8 @@ struct Shoe {
     input_text: String,
     cursor_pos: usize,
     current_dir_contents: Vec<String>,
+    autocomplete_cycle_index: Option<usize>,
+    last_input_before_autocomplete: Option<String>,
 }
 
 impl Shoe {
@@ -271,6 +282,8 @@ impl Shoe {
             input_text: String::new(),
             cursor_pos: 0,
             current_dir_contents,
+            last_input_before_autocomplete: None,
+            autocomplete_cycle_index: None,
         })
     }
     /// Convert cwd to a string, also replacing home path with ~
@@ -383,6 +396,7 @@ impl Shoe {
             if key_event.kind != KeyEventKind::Press {
                 return Ok(());
             }
+            let mut reset_autocomplete_cycle = true;
             match key_event.code {
                 KeyCode::Enter => {
                     self.listening = false;
@@ -397,8 +411,18 @@ impl Shoe {
                     }
                 }
                 KeyCode::Tab => 'tab: {
+                    reset_autocomplete_cycle = false;
                     if self.input_text.is_empty() {
                         break 'tab;
+                    }
+                    if let Some(last_input) = &self.last_input_before_autocomplete {
+                        self.cursor_pos -= self.input_text.len().saturating_sub(last_input.len());
+                        self.input_text = last_input.to_string();
+                        self.autocomplete_cycle_index =
+                            Some(self.autocomplete_cycle_index.unwrap() + 1);
+                    } else {
+                        self.autocomplete_cycle_index = Some(0);
+                        self.last_input_before_autocomplete = Some(self.input_text.to_string());
                     }
                     let mut words = parse_parts(&self.input_text, true);
                     let Some((word_index, word)) = self.get_word_at_cursor() else {
@@ -411,7 +435,9 @@ impl Shoe {
                         matches!(words[word_index].part_type, CommandPartType::QuotesArg);
                     let ends_with_space = words[word_index].text.ends_with(' ');
                     words.remove(word_index);
-                    let autocompletion = autocomplete(&word.text);
+
+                    let autocompletion =
+                        autocomplete(&word.text, self.autocomplete_cycle_index.unwrap());
                     let Some(autocompletion) = autocompletion else {
                         break 'tab;
                     };
@@ -507,6 +533,10 @@ impl Shoe {
                     self.cursor_pos = self.input_text.chars().count();
                 }
                 _ => {}
+            }
+            if reset_autocomplete_cycle {
+                self.autocomplete_cycle_index = None;
+                self.last_input_before_autocomplete = None;
             }
             self.update()?;
         }
