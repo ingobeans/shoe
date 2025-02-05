@@ -1,3 +1,4 @@
+use commands::execute_command;
 use crossterm::{
     cursor::{MoveLeft, MoveRight},
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
@@ -8,6 +9,7 @@ use crossterm::{
 use relative_path::RelativePathBuf;
 use std::{
     collections::VecDeque,
+    env,
     io::{stdin, stdout, Result, Write},
     path::{Path, PathBuf},
     process,
@@ -224,7 +226,13 @@ impl Shoe {
             .ok_or(std::io::Error::other("Couldn't read path as string"))?
             .to_string();
         let home_path = shellexpand::tilde("~").to_string();
-        Ok(replace_case_insensitive(path, home_path, "~".to_string()))
+
+        if env::consts::OS == "windows" {
+            // windows has case insensitive paths
+            Ok(replace_case_insensitive(path, home_path, "~".to_string()))
+        } else {
+            Ok(path.replace(&home_path, "~"))
+        }
     }
     fn update_cwd(&mut self) -> Result<()> {
         self.cwd = std::env::current_dir()?;
@@ -250,21 +258,34 @@ impl Shoe {
             queue!(stdout(), SetForegroundColor(Color::Reset))?;
             return Ok(());
         }
-        let mut command = process::Command::new(keyword);
-        command.args(context.args);
-        let process = command.spawn();
-        match process {
-            Ok(mut process) => {
-                process.wait()?;
+
+        // if on windows, also try running the keyword with the .bat and .cmd extensions if the regular fails
+        let keywords: Vec<String>;
+        if env::consts::OS == "windows" {
+            if !keyword.contains(".") {
+                keywords = vec![
+                    keyword.to_string(),
+                    keyword.to_string() + ".bat",
+                    keyword.to_string() + ".cmd",
+                ]
+            } else {
+                keywords = vec![keyword.to_string()];
             }
-            Err(_) => {
-                queue!(stdout(), SetForegroundColor(colors::ERR_COLOR))?;
-                println!("file/command '{}' not found! :(", keyword);
-            }
+        } else {
+            keywords = vec![keyword.to_string()];
         }
 
-        queue!(stdout(), SetForegroundColor(Color::Reset))?;
-        Ok(())
+        for keyword in keywords {
+            let mut command = process::Command::new(&keyword);
+            command.args(context.args);
+            let process = command.spawn();
+            if let Ok(mut process) = process {
+                process.wait()?;
+                return Ok(());
+            }
+        }
+        let message = format!("file/command '{}' not found! :(", keyword);
+        return Err(std::io::Error::other(message));
     }
     fn write_char(&mut self, new_char: char) {
         if self.input_text.chars().count() == self.cursor_pos {
@@ -502,7 +523,13 @@ impl Shoe {
                         _stdin: stdin(),
                     };
 
-                    self.execute_command(keyword, context)?;
+                    let result = self.execute_command(keyword, context);
+                    if let Err(error) = result {
+                        let _ = queue!(stdout(), SetForegroundColor(colors::ERR_COLOR));
+                        println!("{}", error);
+                    }
+
+                    queue!(stdout(), SetForegroundColor(Color::Reset))?;
                 }
             }
         }
