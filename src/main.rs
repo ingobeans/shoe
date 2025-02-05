@@ -1,4 +1,3 @@
-use commands::execute_command;
 use crossterm::{
     cursor::{MoveLeft, MoveRight},
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
@@ -324,7 +323,7 @@ impl Shoe {
             }
         }
         let message = format!("file/command '{}' not found! :(", keyword);
-        return Err(std::io::Error::other(message));
+        Err(std::io::Error::other(message))
     }
     fn write_char(&mut self, new_char: char) {
         if self.input_text.chars().count() == self.cursor_pos {
