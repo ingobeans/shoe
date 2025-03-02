@@ -180,7 +180,6 @@ pub fn execute_command(keyword: &str, context: &CommandContext) -> CommandResult
 pub struct CommandContext<'a> {
     pub args: &'a VecDeque<&'a String>,
     pub stdout: Stdout,
-    pub _stdin: Stdin,
 }
 
 pub enum CommandResult {

@@ -9,7 +9,7 @@ use relative_path::RelativePathBuf;
 use std::{
     collections::VecDeque,
     env,
-    io::{stdin, stdout, Result, Write},
+    io::{stdout, Result, Write},
     path::{Path, PathBuf},
     process,
 };
@@ -615,7 +615,6 @@ impl Shoe {
                     let context = commands::CommandContext {
                         args: &args,
                         stdout: stdout(),
-                        _stdin: stdin(),
                     };
 
                     let result = self.execute_command(keyword, context);
