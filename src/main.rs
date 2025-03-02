@@ -10,10 +10,9 @@ use relative_path::RelativePathBuf;
 use std::{
     collections::VecDeque,
     env,
-    io::{stdout, Read, Result, StdoutLock, Write},
+    io::{stdout, Read, Result, Write},
     path::{Path, PathBuf},
-    process::{self, ChildStdout, Stdio},
-    rc::Rc,
+    process::{self, Stdio},
 };
 mod colors;
 mod commands;
@@ -365,7 +364,7 @@ impl Shoe {
                     }
                     _ => {
                         // write output
-                        stdout().lock().write(&output_buf).unwrap();
+                        stdout().lock().write_all(&output_buf).unwrap();
                     }
                 }
                 continue;

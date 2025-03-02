@@ -15,7 +15,7 @@ use crossterm::{
 use crate::colors;
 
 fn ls(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
-    let items = fs::read_dir(context.args.front().unwrap_or(&&"."))?;
+    let items = fs::read_dir(context.args.front().unwrap_or(&"."))?;
 
     let mut dirs = vec![];
     let mut files = vec![];
