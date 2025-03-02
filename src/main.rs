@@ -61,7 +61,7 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
             last_char_was_backslash = false;
             continue;
         }
-        if (char == ';' || char == '|') && !in_quote && !last_char_was_backslash {
+        if (char == ';' || char == '|' || char == '>') && !in_quote && !last_char_was_backslash {
             last_char_was_backslash = false;
             if !last.text.is_empty() {
                 parts.push_back(CommandPart {
@@ -250,25 +250,6 @@ struct Command<'a> {
     args: VecDeque<&'a str>,
     modifier: CommandModifier,
 }
-
-//enum CommandInstance<'a> {
-//    Process(Command<'a>),
-//    Builtin(String),
-//}
-//
-//impl CommandInstance<'_> {
-//    fn execute(&self) -> String {
-//        match self {
-//            Self::Process(command) => {
-//                let mut instance = process::Command::new(&command.keyword);
-//                instance.args(&command.args);
-//                let process = instance.spawn();
-//            }
-//            Self::Builtin(output) => output,
-//        }
-//    }
-//}
-
 struct Shoe {
     history_path: String,
     history: Vec<String>,
@@ -358,13 +339,17 @@ impl Shoe {
             }
             // if command was recognized as built in
             if !matches!(result, commands::CommandResult::NotACommand) {
-                match command.modifier {
+                match &command.modifier {
                     CommandModifier::Piped => {
                         last_piped_output = Some(output_buf);
                     }
+                    CommandModifier::Redirected(path) => {
+                        let stripped = strip_ansi_escapes::strip(output_buf);
+                        std::fs::write(path, stripped)?;
+                    }
                     _ => {
                         // write output
-                        stdout().lock().write_all(&output_buf).unwrap();
+                        stdout().lock().write_all(&output_buf)?;
                     }
                 }
                 continue;
@@ -404,36 +389,31 @@ impl Shoe {
                 };
                 any_worked = true;
 
+                if let Some(output) = &last_piped_output {
+                    if let Some(stdin) = &mut process.stdin {
+                        stdin.write_all(output)?;
+                        last_piped_output = None;
+                    }
+                }
+
                 match &command.modifier {
                     CommandModifier::Piped => {
-                        if let Some(output) = last_piped_output {
-                            if let Some(stdin) = &mut process.stdin {
-                                stdin.write_all(&output).unwrap();
-                            }
-                        }
-                        process.wait().unwrap();
+                        process.wait()?;
                         last_piped_output = Some({
                             let mut buf: Vec<u8> = Vec::new();
-                            process
-                                .stdout
-                                .take()
-                                .unwrap()
-                                .read_to_end(&mut buf)
-                                .unwrap();
+                            process.stdout.take().unwrap().read_to_end(&mut buf)?;
                             buf
                         });
                     }
-                    CommandModifier::Redirected(_) => {
-                        unimplemented!();
+                    CommandModifier::Redirected(path) => {
+                        process.wait()?;
+                        let mut buf: Vec<u8> = Vec::new();
+                        process.stdout.take().unwrap().read_to_end(&mut buf)?;
+                        let stripped = strip_ansi_escapes::strip(buf);
+                        std::fs::write(path, stripped)?;
                     }
                     _ => {
-                        if let Some(output) = last_piped_output {
-                            last_piped_output = None;
-                            if let Some(stdin) = &mut process.stdin {
-                                stdin.write_all(&output).unwrap();
-                            }
-                        };
-                        process.wait().unwrap();
+                        process.wait()?;
                     }
                 }
                 break;
@@ -691,15 +671,23 @@ impl Shoe {
             let parts = remove_empty_parts(parse_parts(command, false));
             let mut commands: Vec<Command> = Vec::new();
             let mut current_command: Option<Command> = None;
+            let mut index = 0;
 
-            for (index, part) in parts.iter().enumerate() {
+            while index < parts.len() {
+                let part = &parts[index];
+                index += 1;
                 let mut done = false;
                 if let Some(command) = &mut current_command {
                     if let CommandPartType::Special = part.part_type {
+                        done = true;
                         if part.text == "|" {
                             command.modifier = CommandModifier::Piped;
+                        } else if part.text == ">" {
+                            command.modifier =
+                                CommandModifier::Redirected(parts[index].text.clone());
+                            index += 1;
+                            done = false;
                         }
-                        done = true;
                     } else {
                         command.args.push_back(&part.text);
                     }
@@ -711,9 +699,11 @@ impl Shoe {
                     });
                 }
 
-                if done || index == parts.len() - 1 {
-                    commands.push(current_command.unwrap());
-                    current_command = None;
+                if done || index == parts.len() {
+                    if let Some(command) = current_command {
+                        commands.push(command);
+                        current_command = None;
+                    }
                 }
             }
             let result = self.execute_commands(commands);
