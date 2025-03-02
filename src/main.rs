@@ -144,11 +144,16 @@ fn replace_case_insensitive(source: String, pattern: String, replace: String) ->
     }
 }
 
-fn list_dir(dir: &Path) -> Result<Vec<String>> {
+fn list_dir(dir: &Path) -> Result<Vec<(bool, String)>> {
     let contents = std::fs::read_dir(dir)?;
     let contents = contents
         .flatten()
-        .map(|item| item.file_name().to_string_lossy().to_string())
+        .map(|item| {
+            (
+                item.file_type().unwrap().is_dir(),
+                item.file_name().to_string_lossy().to_string(),
+            )
+        })
         .collect();
     Ok(contents)
 }
@@ -159,8 +164,11 @@ enum AbsoluteOrRelativePathBuf {
 }
 
 /// Autocomplete an input word to a relative path
-fn autocomplete(current_word: &String, mut item_index: usize) -> Option<AbsoluteOrRelativePathBuf> {
-    let mut valid: Vec<AbsoluteOrRelativePathBuf> = Vec::new();
+fn autocomplete(
+    current_word: &String,
+    mut item_index: usize,
+) -> Option<(bool, AbsoluteOrRelativePathBuf)> {
+    let mut valid: Vec<(bool, AbsoluteOrRelativePathBuf)> = Vec::new();
     // check if is absolute
     let path = PathBuf::from(&current_word);
     if path.is_absolute() {
@@ -171,21 +179,28 @@ fn autocomplete(current_word: &String, mut item_index: usize) -> Option<Absolute
         if env::consts::OS == "windows" {
             file_name = file_name.to_lowercase()
         };
-        for item in contents {
+        for (is_dir, item) in contents {
             let item_in_maybe_lowercase = if env::consts::OS == "windows" {
                 item.to_lowercase()
             } else {
                 item.clone()
             };
+            let real_item = absolute_parent.join(item);
             if item_in_maybe_lowercase.starts_with(&file_name) {
-                valid.push(AbsoluteOrRelativePathBuf::Absolute(
-                    absolute_parent.join(item),
-                ));
+                valid.push((is_dir, AbsoluteOrRelativePathBuf::Absolute(real_item)));
             }
         }
     } else {
-        let path = RelativePathBuf::from(&current_word);
-        let cwd = std::env::current_dir().ok()?;
+        let path;
+        let cwd;
+        if current_word.starts_with("~/") {
+            let stripped_current_word = current_word[1..].to_string();
+            path = RelativePathBuf::from(stripped_current_word);
+            cwd = shellexpand::tilde("~").to_string().into();
+        } else {
+            path = RelativePathBuf::from(current_word);
+            cwd = std::env::current_dir().ok()?;
+        };
         let file_name = if env::consts::OS == "windows" {
             path.file_name()?.to_lowercase()
         } else {
@@ -198,16 +213,18 @@ fn autocomplete(current_word: &String, mut item_index: usize) -> Option<Absolute
         let relative_parent = path.parent()?;
 
         let contents = list_dir(absolute_parent).ok()?;
-        for item in contents {
+        for (is_dir, mut item) in contents {
             let item_in_maybe_lowercase = if env::consts::OS == "windows" {
                 item.to_lowercase()
             } else {
                 item.clone()
             };
             if item_in_maybe_lowercase.starts_with(&file_name) {
-                valid.push(AbsoluteOrRelativePathBuf::Relative(
-                    relative_parent.join(item),
-                ));
+                if current_word.starts_with("~/") {
+                    item = "~/".to_string() + &item;
+                }
+                let real_item = relative_parent.join(item);
+                valid.push((is_dir, AbsoluteOrRelativePathBuf::Relative(real_item)));
             }
         }
     }
@@ -281,7 +298,7 @@ impl Shoe {
 
         let history_index = history.len();
         let cwd = std::env::current_dir()?;
-        let current_dir_contents = list_dir(&cwd)?;
+        let current_dir_contents = list_dir(&cwd)?.into_iter().map(|f| f.1).collect();
 
         Ok(Shoe {
             history_path,
@@ -315,7 +332,7 @@ impl Shoe {
     }
     fn update_cwd(&mut self) -> Result<()> {
         self.cwd = std::env::current_dir()?;
-        self.current_dir_contents = list_dir(&self.cwd)?;
+        self.current_dir_contents = list_dir(&self.cwd)?.into_iter().map(|f| f.1).collect();
         Ok(())
     }
     fn execute_commands(&mut self, commands: Vec<Command>) -> Result<()> {
@@ -506,20 +523,16 @@ impl Shoe {
                     let ends_with_space = words[word_index].text.ends_with(' ');
                     words.remove(word_index);
 
-                    let autocompletion =
-                        autocomplete(&word.text, self.autocomplete_cycle_index.unwrap());
-                    let Some(autocompletion) = autocompletion else {
+                    let result = autocomplete(&word.text, self.autocomplete_cycle_index.unwrap());
+                    let Some((autocompletion_is_dir, autocompletion)) = result else {
                         break 'tab;
                     };
-                    let autocompletion_is_dir: bool;
                     let mut autocompletion_string: String;
                     match autocompletion {
                         AbsoluteOrRelativePathBuf::Relative(relative) => {
                             autocompletion_string = relative.to_string();
-                            autocompletion_is_dir = relative.to_logical_path(&self.cwd).is_dir();
                         }
                         AbsoluteOrRelativePathBuf::Absolute(absolute) => {
-                            autocompletion_is_dir = absolute.is_dir();
                             autocompletion_string = absolute_pathbuf_to_string(absolute);
                         }
                     }
