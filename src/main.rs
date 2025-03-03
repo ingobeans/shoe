@@ -379,9 +379,7 @@ impl Shoe {
         };
 
         for command in rc {
-            let parts = remove_empty_parts(parse_parts(&command, false));
-            let commands = Self::parts_to_commands_vec(&parts)?;
-            instance.execute_commands(commands)?;
+            instance.execute_command(&command, false)?;
         }
 
         Ok(instance)
@@ -832,58 +830,63 @@ impl Shoe {
         }
         Ok(commands)
     }
+    fn execute_command(&mut self, command: &String, allow_add_to_history: bool) -> Result<()> {
+        if command.trim().is_empty() {
+            self.history_index = self.history.len();
+            return Ok(());
+        }
+        let mut should_store_history = true;
+        if let Some(last_input) = self.history.last() {
+            if last_input == command {
+                should_store_history = false;
+            }
+        }
+        should_store_history &= allow_add_to_history;
+
+        if should_store_history {
+            self.history.push(command.clone());
+
+            if let Some(history_path) = &self.history_path {
+                std::fs::write(history_path, self.history.join("\n"))?;
+            }
+        }
+
+        self.history_index = self.history.len();
+
+        let parts = remove_empty_parts(parse_parts(command, false));
+
+        // store any errors that arise here
+        let mut err: Option<std::io::Error> = None;
+
+        let commands = Self::parts_to_commands_vec(&parts);
+        match commands {
+            Ok(commands) => {
+                let execution_result = self.execute_commands(commands);
+
+                if let Err(error) = execution_result {
+                    // if command execution failed, store error in err
+                    err = Some(error);
+                }
+            }
+            Err(error) => {
+                // if commands parsing failed, store error in err
+                err = Some(error);
+            }
+        }
+
+        if let Some(err) = err {
+            let _ = queue!(stdout(), SetForegroundColor(consts::ERR_COLOR));
+            println!("{}", err);
+        }
+
+        queue!(stdout(), SetForegroundColor(Color::Reset))?;
+        Ok(())
+    }
     fn start(&mut self) -> Result<()> {
         self.running = true;
         while self.running {
             let command = &self.listen()?;
-            if command.is_empty() {
-                self.history_index = self.history.len();
-                continue;
-            }
-            let mut should_store_history = true;
-            if let Some(last_input) = self.history.last() {
-                if last_input == command {
-                    should_store_history = false;
-                }
-            }
-
-            if should_store_history {
-                self.history.push(command.clone());
-
-                if let Some(history_path) = &self.history_path {
-                    std::fs::write(history_path, self.history.join("\n"))?;
-                }
-            }
-
-            self.history_index = self.history.len();
-
-            let parts = remove_empty_parts(parse_parts(command, false));
-
-            // store any errors that arise here
-            let mut err: Option<std::io::Error> = None;
-
-            let commands = Self::parts_to_commands_vec(&parts);
-            match commands {
-                Ok(commands) => {
-                    let execution_result = self.execute_commands(commands);
-
-                    if let Err(error) = execution_result {
-                        // if command execution failed, store error in err
-                        err = Some(error);
-                    }
-                }
-                Err(error) => {
-                    // if commands parsing failed, store error in err
-                    err = Some(error);
-                }
-            }
-
-            if let Some(err) = err {
-                let _ = queue!(stdout(), SetForegroundColor(consts::ERR_COLOR));
-                println!("{}", err);
-            }
-
-            queue!(stdout(), SetForegroundColor(Color::Reset))?;
+            self.execute_command(command, true)?;
         }
         Ok(())
     }
