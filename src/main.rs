@@ -386,7 +386,8 @@ impl Shoe {
             if !matches!(result, commands::CommandResult::NotACommand) {
                 match &command.modifier {
                     CommandModifier::Piped => {
-                        last_piped_output = Some(output_buf);
+                        let stripped = strip_ansi_escapes::strip(output_buf);
+                        last_piped_output = Some(stripped);
                     }
                     CommandModifier::Redirected(path) => {
                         let stripped = strip_ansi_escapes::strip(output_buf);
@@ -447,7 +448,8 @@ impl Shoe {
                         last_piped_output = Some({
                             let mut buf: Vec<u8> = Vec::new();
                             process.stdout.take().unwrap().read_to_end(&mut buf)?;
-                            buf
+                            let stripped = strip_ansi_escapes::strip(buf);
+                            stripped
                         });
                     }
                     CommandModifier::Redirected(path) => {
