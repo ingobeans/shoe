@@ -1,5 +1,5 @@
 # shoe
-![screenshot](https://github.com/user-attachments/assets/63b7691e-1d8a-4bcf-8ad7-f6bc69b5af9a)
+![screenshot](https://github.com/user-attachments/assets/87c1b770-8eb8-4997-86e2-d89bf245c446)
 
 shoe: a shell!
 
