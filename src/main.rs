@@ -61,7 +61,10 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
             last_char_was_backslash = false;
             continue;
         }
-        if (char == ';' || char == '|' || char == '>' || char == '&') && !in_quote && !last_char_was_backslash {
+        if (char == ';' || char == '|' || char == '>' || char == '&')
+            && !in_quote
+            && !last_char_was_backslash
+        {
             last_char_was_backslash = false;
             if !matches!(last.part_type, CommandPartType::Special) && !last.text.is_empty() {
                 parts.push_back(CommandPart {
@@ -74,27 +77,29 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
             last.text.insert(last.text.len(), char);
             continue;
         }
-        if matches!(last.part_type,CommandPartType::Special) {
-        	parts.push_back(CommandPart {
-            		text: String::from(char),
-            		part_type: CommandPartType::RegularArg,
-           
-        	});
-        	last_char_was_backslash = false;
-        	continue;
+        if matches!(last.part_type, CommandPartType::Special) {
+            parts.push_back(CommandPart {
+                text: String::from(char),
+                part_type: CommandPartType::RegularArg,
+            });
+            last_char_was_backslash = false;
+            continue;
         }
         last.text.insert(last.text.len(), char);
         last_char_was_backslash = false;
     }
     let mut make_keyword = true;
     for part in parts.iter_mut() {
-    	if make_keyword && matches!(part.part_type, CommandPartType::RegularArg)  && !part.text.trim().is_empty(){
-    		make_keyword = false;
-    		part.part_type = CommandPartType::Keyword;
-    	} else if matches!(part.part_type, CommandPartType::Special) {
-    		make_keyword = true;
-    	}
-    } 
+        if make_keyword
+            && matches!(part.part_type, CommandPartType::RegularArg)
+            && !part.text.trim().is_empty()
+        {
+            make_keyword = false;
+            part.part_type = CommandPartType::Keyword;
+        } else if matches!(part.part_type, CommandPartType::Special) {
+            make_keyword = true;
+        }
+    }
     parts
 }
 
@@ -744,11 +749,11 @@ impl Shoe {
         enable_raw_mode()?;
         self.listening = true;
 
-        queue!(stdout(), SetForegroundColor(colors::SECONDARY_COLOR))?;
+        queue!(stdout(), SetForegroundColor(colors::PRIMARY_COLOR))?;
         print!("[");
         queue!(stdout(), SetForegroundColor(Color::White))?;
         print!("{}", self.cwd_to_str()?);
-        queue!(stdout(), SetForegroundColor(colors::SECONDARY_COLOR))?;
+        queue!(stdout(), SetForegroundColor(colors::PRIMARY_COLOR))?;
         print!("]> ");
 
         stdout().flush()?;
@@ -779,7 +784,7 @@ struct CommandPart {
 }
 
 fn main() {
-    queue!(stdout(), SetForegroundColor(colors::SECONDARY_COLOR)).unwrap();
+    queue!(stdout(), SetForegroundColor(colors::PRIMARY_COLOR)).unwrap();
     print!("shoe ");
     queue!(stdout(), SetForegroundColor(Color::White)).unwrap();
     print!("[v{}]\n\n", env!("CARGO_PKG_VERSION"));
