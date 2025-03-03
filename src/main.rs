@@ -103,6 +103,40 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
     parts
 }
 
+fn write_file<P, C>(path: P, contents: C, append: bool) -> std::io::Result<()>
+where
+    P: AsRef<Path>,
+    C: AsRef<[u8]> + Into<Vec<u8>>,
+{
+    if !append {
+        std::fs::write(path, contents)
+    } else {
+        let mut file = {
+            let open = std::fs::File::open(&path);
+            if let Ok(file) = open {
+                file
+            } else {
+                std::fs::File::create(&path)?
+            }
+        };
+        let mut file_contents = Vec::new();
+        // read old contents
+        file.read_to_end(&mut file_contents)?;
+
+        let source_ends_with_newline = file_contents.ends_with(b"\n") || file_contents.is_empty();
+        let new_starts_with_newline = contents.as_ref()[0] == b'\n';
+
+        // if no newline to seperate the new and old contents, add one
+        if !source_ends_with_newline && !new_starts_with_newline {
+            file_contents.push(b'\n');
+        }
+        // add new contents
+        file_contents.append(&mut contents.into());
+
+        // write new file_contents
+        std::fs::write(path, file_contents)
+    }
+}
 fn remove_empty_parts(parts: VecDeque<CommandPart>) -> VecDeque<CommandPart> {
     let mut new = VecDeque::new();
     for part in parts {
@@ -271,16 +305,26 @@ fn absolute_pathbuf_to_string(input: PathBuf) -> String {
     parts.join("/")
 }
 
-enum CommandModifier {
+enum CommandOutputModifier {
+    /// Command output has been piped.
     Piped,
-    Redirected(String),
+    /// Command output has been redirected to a file. (path,append)
+    Redirected(String, bool),
+    /// Command has no modifier.
     None,
+}
+
+enum ExitType {
+    Any,
+    Success,
+    Fail,
 }
 
 struct Command<'a> {
     keyword: String,
     args: VecDeque<&'a str>,
-    modifier: CommandModifier,
+    modifier: CommandOutputModifier,
+    run_on: ExitType,
 }
 struct Shoe {
     history_path: Option<String>,
@@ -364,8 +408,32 @@ impl Shoe {
         Ok(())
     }
     fn execute_commands(&mut self, commands: Vec<Command>) -> Result<()> {
+        // if command has output piped to the next, store the output here
         let mut last_piped_output: Option<Vec<u8>> = None;
+        // if last command succeeeded
+        let mut last_success: Option<bool> = None;
+
+        // run each command sequentially
         for command in &commands {
+            queue!(stdout(), SetForegroundColor(Color::Reset))?;
+            match command.run_on {
+                ExitType::Success => {
+                    if let Some(last_success) = last_success {
+                        if !last_success {
+                            continue;
+                        }
+                    }
+                }
+                ExitType::Fail => {
+                    if let Some(last_success) = last_success {
+                        if last_success {
+                            continue;
+                        }
+                    }
+                }
+                ExitType::Any => {}
+            }
+
             // try running built in commands
             let mut output_buf = Vec::new();
             let mut context = CommandContext {
@@ -373,8 +441,11 @@ impl Shoe {
                 stdout: &mut output_buf,
             };
             let result = commands::execute_command(&command.keyword, &mut context);
+            let mut builtin_command_failed = false;
             match result {
-                commands::CommandResult::NotACommand => {}
+                commands::CommandResult::Error => {
+                    builtin_command_failed = true;
+                }
                 commands::CommandResult::Exit => {
                     self.listening = false;
                     self.running = false;
@@ -385,19 +456,20 @@ impl Shoe {
             // if command was recognized as built in
             if !matches!(result, commands::CommandResult::NotACommand) {
                 match &command.modifier {
-                    CommandModifier::Piped => {
+                    CommandOutputModifier::Piped => {
                         let stripped = strip_ansi_escapes::strip(output_buf);
                         last_piped_output = Some(stripped);
                     }
-                    CommandModifier::Redirected(path) => {
+                    CommandOutputModifier::Redirected(path, append) => {
                         let stripped = strip_ansi_escapes::strip(output_buf);
-                        std::fs::write(path, stripped)?;
+                        write_file(path, stripped, *append)?;
                     }
                     _ => {
                         // write output
                         stdout().lock().write_all(&output_buf)?;
                     }
                 }
+                last_success = Some(!builtin_command_failed);
                 continue;
             }
 
@@ -426,7 +498,7 @@ impl Shoe {
                     process.stdin(Stdio::piped());
                 };
 
-                if !matches!(command.modifier, CommandModifier::None) {
+                if !matches!(command.modifier, CommandOutputModifier::None) {
                     process.stdout(Stdio::piped());
                 }
 
@@ -441,10 +513,12 @@ impl Shoe {
                         last_piped_output = None;
                     }
                 }
+                let success: bool;
 
                 match &command.modifier {
-                    CommandModifier::Piped => {
-                        process.wait()?;
+                    CommandOutputModifier::Piped => {
+                        success = process.wait()?.success();
+
                         last_piped_output = Some({
                             let mut buf: Vec<u8> = Vec::new();
                             process.stdout.take().unwrap().read_to_end(&mut buf)?;
@@ -452,22 +526,25 @@ impl Shoe {
                             stripped
                         });
                     }
-                    CommandModifier::Redirected(path) => {
-                        process.wait()?;
+                    CommandOutputModifier::Redirected(path, append) => {
+                        success = process.wait()?.success();
+
                         let mut buf: Vec<u8> = Vec::new();
                         process.stdout.take().unwrap().read_to_end(&mut buf)?;
                         let stripped = strip_ansi_escapes::strip(buf);
-                        std::fs::write(path, stripped)?;
+                        write_file(path, stripped, *append)?;
                     }
                     _ => {
-                        process.wait()?;
+                        success = process.wait()?.success();
                     }
                 }
+                last_success = Some(success);
                 break;
             }
             if !any_worked {
-                let message = format!("file/command '{}' not found! :(", command.keyword);
-                return Err(std::io::Error::other(message));
+                last_success = Some(false);
+                queue!(stdout(), SetForegroundColor(consts::ERR_COLOR)).unwrap();
+                println!("file/command '{}' not found! :(", command.keyword);
             }
         }
         Ok(())
@@ -694,6 +771,7 @@ impl Shoe {
         let mut commands: Vec<Command> = Vec::new();
         let mut current_command: Option<Command> = None;
         let mut index = 0;
+        let mut run_on = ExitType::Any;
 
         while index < parts.len() {
             let part = &parts[index];
@@ -701,13 +779,43 @@ impl Shoe {
             let mut done = false;
             if let Some(command) = &mut current_command {
                 if let CommandPartType::Special = part.part_type {
-                    done = true;
-                    if part.text == "|" {
-                        command.modifier = CommandModifier::Piped;
-                    } else if part.text == ">" {
-                        command.modifier = CommandModifier::Redirected(parts[index].text.clone());
-                        index += 1;
-                        done = false;
+                    match part.text.as_str() {
+                        ";" | "&" => {
+                            done = true;
+                        }
+                        "&&" => {
+                            done = true;
+                            run_on = ExitType::Success;
+                        }
+                        "||" => {
+                            done = true;
+                            run_on = ExitType::Fail;
+                        }
+                        "|" => {
+                            done = true;
+                            command.modifier = CommandOutputModifier::Piped;
+                        }
+                        ">" => {
+                            command.modifier =
+                                CommandOutputModifier::Redirected(parts[index].text.clone(), false);
+                            index += 1;
+                        }
+                        ">>" => {
+                            command.modifier =
+                                CommandOutputModifier::Redirected(parts[index].text.clone(), true);
+                            index += 1;
+                        }
+                        _ => {
+                            // lets hope i remember to replace this before pushing
+                            let mut err_args = VecDeque::new();
+                            err_args.push_back("error: unexpected token!");
+                            return vec![Command {
+                                keyword: String::from("echo"),
+                                args: err_args,
+                                modifier: CommandOutputModifier::None,
+                                run_on: ExitType::Any,
+                            }];
+                        }
                     }
                 } else {
                     command.args.push_back(&part.text);
@@ -716,8 +824,10 @@ impl Shoe {
                 current_command = Some(Command {
                     keyword: part.text.clone(),
                     args: VecDeque::new(),
-                    modifier: CommandModifier::None,
+                    modifier: CommandOutputModifier::None,
+                    run_on,
                 });
+                run_on = ExitType::Any;
             }
 
             if done || index == parts.len() {
