@@ -3,7 +3,7 @@ use std::{
     error::Error,
     fs,
     io::{stdout, Read, Write},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use crossterm::{
@@ -108,13 +108,27 @@ fn cp(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
         Err(std::io::Error::other("Usage: 'cp <source> <dest>'"))?;
     }
     let source = context.args[0];
-    let dest = context.args[1];
+    let mut dest_pathbuf: PathBuf = context.args[1].into();
 
     let source_is_file = fs::metadata(source)?.is_file();
-    if source_is_file {
-        std::fs::copy(source, dest)?;
+
+    // is destination the path to an existing directory?
+    let dest_is_existing_directory = if let Ok(metadata) = fs::metadata(&dest_pathbuf) {
+        metadata.is_dir()
     } else {
-        copy_dir(source, dest)?;
+        false
+    };
+
+    // if source is a file, and destination is a directory (without filename), append the source filename to the destination path
+    if source_is_file && dest_is_existing_directory {
+        let source_pathbuf: PathBuf = source.into();
+        dest_pathbuf.push(source_pathbuf.file_name().unwrap());
+    }
+
+    if source_is_file {
+        std::fs::copy(source, dest_pathbuf)?;
+    } else {
+        copy_dir(source, dest_pathbuf)?;
     }
     Ok(CommandResult::Lovely)
 }
