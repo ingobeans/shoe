@@ -36,7 +36,7 @@ fn ls(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     for dir in dirs {
         writeln!(context.stdout, "{}", dir)?;
     }
-    queue!(context.stdout, SetForegroundColor(consts::SECONDARY_COLOR))?;
+    queue!(context.stdout, SetForegroundColor(Color::Reset))?;
     for dir in files {
         writeln!(context.stdout, "{}", dir)?;
     }
