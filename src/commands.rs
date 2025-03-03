@@ -57,7 +57,6 @@ fn cd(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
 }
 
 fn pwd(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
-    queue!(context.stdout, SetForegroundColor(colors::SECONDARY_COLOR))?;
     writeln!(
         context.stdout,
         "{}",
