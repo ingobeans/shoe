@@ -12,7 +12,7 @@ use crossterm::{
     terminal,
 };
 
-use crate::colors;
+use crate::consts;
 
 fn ls(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     let items = fs::read_dir(context.args.front().unwrap_or(&"."))?;
@@ -32,11 +32,11 @@ fn ls(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
             Err(_) => Err(std::io::Error::other("Path name couldn't be read"))?,
         }
     }
-    queue!(context.stdout, SetForegroundColor(colors::PRIMARY_COLOR))?;
+    queue!(context.stdout, SetForegroundColor(consts::PRIMARY_COLOR))?;
     for dir in dirs {
         writeln!(context.stdout, "{}", dir)?;
     }
-    queue!(context.stdout, SetForegroundColor(colors::SECONDARY_COLOR))?;
+    queue!(context.stdout, SetForegroundColor(consts::SECONDARY_COLOR))?;
     for dir in files {
         writeln!(context.stdout, "{}", dir)?;
     }
@@ -188,7 +188,7 @@ pub enum CommandResult {
 pub fn handle_result(result: Result<CommandResult, Box<dyn Error>>) -> CommandResult {
     match result {
         Err(error) => {
-            let _ = queue!(stdout(), SetForegroundColor(colors::ERR_COLOR));
+            let _ = queue!(stdout(), SetForegroundColor(consts::ERR_COLOR));
             println!("{}", error);
             CommandResult::Error
         }

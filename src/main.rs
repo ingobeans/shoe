@@ -14,8 +14,8 @@ use std::{
     path::{Path, PathBuf},
     process::{self, Stdio},
 };
-mod colors;
 mod commands;
+mod consts;
 
 /// Function parse line to arguments, with support for quote enclosures
 ///
@@ -106,7 +106,7 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
 fn remove_empty_parts(parts: VecDeque<CommandPart>) -> VecDeque<CommandPart> {
     let mut new = VecDeque::new();
     for part in parts {
-        if part.text.is_empty() && !matches!(part.part_type, CommandPartType::QuotesArg) {
+        if part.text.trim().is_empty() && !matches!(part.part_type, CommandPartType::QuotesArg) {
         } else {
             new.push_back(part);
         }
@@ -283,7 +283,7 @@ struct Command<'a> {
     modifier: CommandModifier,
 }
 struct Shoe {
-    history_path: String,
+    history_path: Option<String>,
     history: Vec<String>,
     history_index: usize,
     running: bool,
@@ -297,25 +297,30 @@ struct Shoe {
 }
 
 impl Shoe {
-    fn new(history_path: String) -> Result<Self> {
-        let history_text =
-            std::fs::read_to_string(&history_path).expect("Couldn't read ~/.shoehistory");
-        let history: Vec<String> = history_text
-            .split('\n')
-            .filter_map(|line| {
-                if line.trim().is_empty() {
-                    None
-                } else {
-                    Option::<String>::Some(line.to_string())
-                }
-            })
-            .collect();
-
+    fn new(history_path: Option<String>, rc: Vec<String>) -> Result<Self> {
+        let history: Vec<String>;
+        if let Some(history_path) = &history_path {
+            let history_text =
+                std::fs::read_to_string(&history_path).expect("Couldn't read ~/.shoehistory");
+            history = history_text
+                .split('\n')
+                .filter_map(|line| {
+                    if line.trim().is_empty() {
+                        None
+                    } else {
+                        Option::<String>::Some(line.to_string())
+                    }
+                })
+                .collect();
+        } else {
+            history = Vec::new();
+        }
         let history_index = history.len();
+
         let cwd = std::env::current_dir()?;
         let current_dir_contents = list_dir(&cwd)?.into_iter().map(|f| f.1).collect();
 
-        Ok(Shoe {
+        let mut instance = Shoe {
             history_path,
             history,
             history_index,
@@ -327,7 +332,15 @@ impl Shoe {
             current_dir_contents,
             last_input_before_autocomplete: None,
             autocomplete_cycle_index: None,
-        })
+        };
+
+        for command in rc {
+            let parts = remove_empty_parts(parse_parts(&command, false));
+            let commands = Self::parts_to_commands_vec(&parts);
+            instance.execute_commands(commands)?;
+        }
+
+        Ok(instance)
     }
     /// Convert cwd to a string, also replacing home path with ~
     fn cwd_to_str(&self) -> Result<String> {
@@ -645,10 +658,10 @@ impl Shoe {
         let parts = parse_parts(&self.input_text, true);
         for part in parts {
             let color = match part.part_type {
-                CommandPartType::Keyword => colors::PRIMARY_COLOR,
-                CommandPartType::QuotesArg => colors::SECONDARY_COLOR,
+                CommandPartType::Keyword => consts::PRIMARY_COLOR,
+                CommandPartType::QuotesArg => consts::SECONDARY_COLOR,
                 CommandPartType::RegularArg => Color::White,
-                CommandPartType::Special => colors::SECONDARY_COLOR,
+                CommandPartType::Special => consts::SECONDARY_COLOR,
             };
             queue!(stdout(), SetForegroundColor(color))?;
             print!("{}", part.text);
@@ -675,6 +688,45 @@ impl Shoe {
 
         Ok(())
     }
+    fn parts_to_commands_vec(parts: &VecDeque<CommandPart>) -> Vec<Command> {
+        let mut commands: Vec<Command> = Vec::new();
+        let mut current_command: Option<Command> = None;
+        let mut index = 0;
+
+        while index < parts.len() {
+            let part = &parts[index];
+            index += 1;
+            let mut done = false;
+            if let Some(command) = &mut current_command {
+                if let CommandPartType::Special = part.part_type {
+                    done = true;
+                    if part.text == "|" {
+                        command.modifier = CommandModifier::Piped;
+                    } else if part.text == ">" {
+                        command.modifier = CommandModifier::Redirected(parts[index].text.clone());
+                        index += 1;
+                        done = false;
+                    }
+                } else {
+                    command.args.push_back(&part.text);
+                }
+            } else {
+                current_command = Some(Command {
+                    keyword: part.text.clone(),
+                    args: VecDeque::new(),
+                    modifier: CommandModifier::None,
+                });
+            }
+
+            if done || index == parts.len() {
+                if let Some(command) = current_command {
+                    commands.push(command);
+                    current_command = None;
+                }
+            }
+        }
+        commands
+    }
     fn start(&mut self) -> Result<()> {
         self.running = true;
         while self.running {
@@ -692,52 +744,20 @@ impl Shoe {
 
             if should_store_history {
                 self.history.push(command.clone());
-                std::fs::write(&self.history_path, self.history.join("\n"))?;
+
+                if let Some(history_path) = &self.history_path {
+                    std::fs::write(history_path, self.history.join("\n"))?;
+                }
             }
+
             self.history_index = self.history.len();
 
             let parts = remove_empty_parts(parse_parts(command, false));
-            let mut commands: Vec<Command> = Vec::new();
-            let mut current_command: Option<Command> = None;
-            let mut index = 0;
-
-            while index < parts.len() {
-                let part = &parts[index];
-                index += 1;
-                let mut done = false;
-                if let Some(command) = &mut current_command {
-                    if let CommandPartType::Special = part.part_type {
-                        done = true;
-                        if part.text == "|" {
-                            command.modifier = CommandModifier::Piped;
-                        } else if part.text == ">" {
-                            command.modifier =
-                                CommandModifier::Redirected(parts[index].text.clone());
-                            index += 1;
-                            done = false;
-                        }
-                    } else {
-                        command.args.push_back(&part.text);
-                    }
-                } else {
-                    current_command = Some(Command {
-                        keyword: part.text.clone(),
-                        args: VecDeque::new(),
-                        modifier: CommandModifier::None,
-                    });
-                }
-
-                if done || index == parts.len() {
-                    if let Some(command) = current_command {
-                        commands.push(command);
-                        current_command = None;
-                    }
-                }
-            }
+            let commands = Self::parts_to_commands_vec(&parts);
             let result = self.execute_commands(commands);
 
             if let Err(error) = result {
-                let _ = queue!(stdout(), SetForegroundColor(colors::ERR_COLOR));
+                let _ = queue!(stdout(), SetForegroundColor(consts::ERR_COLOR));
                 println!("{}", error);
             }
 
@@ -749,11 +769,11 @@ impl Shoe {
         enable_raw_mode()?;
         self.listening = true;
 
-        queue!(stdout(), SetForegroundColor(colors::PRIMARY_COLOR))?;
+        queue!(stdout(), SetForegroundColor(consts::PRIMARY_COLOR))?;
         print!("[");
         queue!(stdout(), SetForegroundColor(Color::White))?;
         print!("{}", self.cwd_to_str()?);
-        queue!(stdout(), SetForegroundColor(colors::PRIMARY_COLOR))?;
+        queue!(stdout(), SetForegroundColor(consts::PRIMARY_COLOR))?;
         print!("]> ");
 
         stdout().flush()?;
@@ -784,17 +804,67 @@ struct CommandPart {
 }
 
 fn main() {
-    queue!(stdout(), SetForegroundColor(colors::PRIMARY_COLOR)).unwrap();
+    let args = std::env::args();
+    let mut use_history = true;
+    let mut use_rc = true;
+    let mut first = true;
+    for arg in args {
+        if first {
+            first = false;
+            continue;
+        }
+        match arg.as_str() {
+            "--no-history" => {
+                use_history = false;
+            }
+            "--no-rc" => {
+                use_rc = false;
+            }
+            "-h" | "--help" => {
+                println!("{}", consts::HELP_MESSAGE);
+                return;
+            }
+            _ => {
+                queue!(stdout(), SetForegroundColor(consts::ERR_COLOR)).unwrap();
+                println!("unknown arg: '{}'. do -h for help", arg);
+                queue!(stdout(), SetForegroundColor(Color::Reset)).unwrap();
+                return;
+            }
+        }
+    }
+
+    queue!(stdout(), SetForegroundColor(consts::PRIMARY_COLOR)).unwrap();
     print!("shoe ");
     queue!(stdout(), SetForegroundColor(Color::White)).unwrap();
     print!("[v{}]\n\n", env!("CARGO_PKG_VERSION"));
     stdout().flush().unwrap();
 
-    let path = shellexpand::tilde("~/.shoehistory").to_string();
-    if std::fs::metadata(&path).is_err() {
-        std::fs::write(&path, "").expect("Couldn't create ~/.shoehistory");
+    let path: Option<String>;
+    if use_history {
+        let history_path = shellexpand::tilde("~/.shoehistory").to_string();
+        if std::fs::metadata(&history_path).is_err() {
+            std::fs::write(&history_path, "").expect("Couldn't create ~/.shoehistory");
+        }
+        path = Some(history_path);
+    } else {
+        path = None;
     }
 
-    let mut shoe = Shoe::new(path).unwrap();
+    let rc: Vec<String>;
+    if use_rc {
+        let rc_path = shellexpand::tilde("~/.shoerc").to_string();
+        if std::fs::metadata(&rc_path).is_err() {
+            std::fs::write(&rc_path, "").expect("Couldn't create ~/.shoerc");
+        }
+        rc = std::fs::read_to_string(&rc_path)
+            .expect("Couldn't read ~/.shoerc")
+            .split('\n')
+            .map(str::to_string)
+            .collect()
+    } else {
+        rc = Vec::new();
+    }
+
+    let mut shoe = Shoe::new(path, rc).unwrap();
     shoe.start().unwrap();
 }

@@ -13,3 +13,8 @@ pub static SECONDARY_COLOR: Color = Color::Rgb {
 };
 
 pub static ERR_COLOR: Color = Color::Red;
+
+pub static HELP_MESSAGE: &'static str = "
+--help (-h)   - displays this help message
+--no-history  - dont store history in ~/.shoehistory
+--no-rc       - dont run startup commands from ~/.shoerc";
