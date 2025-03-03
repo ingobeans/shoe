@@ -380,7 +380,7 @@ impl Shoe {
 
         for command in rc {
             let parts = remove_empty_parts(parse_parts(&command, false));
-            let commands = Self::parts_to_commands_vec(&parts);
+            let commands = Self::parts_to_commands_vec(&parts)?;
             instance.execute_commands(commands)?;
         }
 
@@ -767,7 +767,7 @@ impl Shoe {
 
         Ok(())
     }
-    fn parts_to_commands_vec(parts: &VecDeque<CommandPart>) -> Vec<Command> {
+    fn parts_to_commands_vec(parts: &VecDeque<CommandPart>) -> Result<Vec<Command>> {
         let mut commands: Vec<Command> = Vec::new();
         let mut current_command: Option<Command> = None;
         let mut index = 0;
@@ -806,15 +806,8 @@ impl Shoe {
                             index += 1;
                         }
                         _ => {
-                            // lets hope i remember to replace this before pushing
-                            let mut err_args = VecDeque::new();
-                            err_args.push_back("error: unexpected token!");
-                            return vec![Command {
-                                keyword: String::from("echo"),
-                                args: err_args,
-                                modifier: CommandOutputModifier::None,
-                                run_on: ExitType::Any,
-                            }];
+                            let message = format!("unexpected token '{}'", part.text);
+                            return Err(std::io::Error::other(message));
                         }
                     }
                 } else {
@@ -837,7 +830,7 @@ impl Shoe {
                 }
             }
         }
-        commands
+        Ok(commands)
     }
     fn start(&mut self) -> Result<()> {
         self.running = true;
@@ -865,12 +858,29 @@ impl Shoe {
             self.history_index = self.history.len();
 
             let parts = remove_empty_parts(parse_parts(command, false));
-            let commands = Self::parts_to_commands_vec(&parts);
-            let result = self.execute_commands(commands);
 
-            if let Err(error) = result {
+            // store any errors that arise here
+            let mut err: Option<std::io::Error> = None;
+
+            let commands = Self::parts_to_commands_vec(&parts);
+            match commands {
+                Ok(commands) => {
+                    let execution_result = self.execute_commands(commands);
+
+                    if let Err(error) = execution_result {
+                        // if command execution failed, store error in err
+                        err = Some(error);
+                    }
+                }
+                Err(error) => {
+                    // if commands parsing failed, store error in err
+                    err = Some(error);
+                }
+            }
+
+            if let Some(err) = err {
                 let _ = queue!(stdout(), SetForegroundColor(consts::ERR_COLOR));
-                println!("{}", error);
+                println!("{}", err);
             }
 
             queue!(stdout(), SetForegroundColor(Color::Reset))?;
