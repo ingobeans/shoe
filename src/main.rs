@@ -26,7 +26,7 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
     let mut parts = VecDeque::new();
     parts.push_back(CommandPart {
         text: String::new(),
-        part_type: CommandPartType::Keyword,
+        part_type: CommandPartType::RegularArg,
     });
     let mut last_char_was_backslash = false;
     let mut in_quote = false;
@@ -61,30 +61,40 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
             last_char_was_backslash = false;
             continue;
         }
-        if (char == ';' || char == '|' || char == '>') && !in_quote && !last_char_was_backslash {
+        if (char == ';' || char == '|' || char == '>' || char == '&') && !in_quote && !last_char_was_backslash {
             last_char_was_backslash = false;
-            if !last.text.is_empty() {
+            if !matches!(last.part_type, CommandPartType::Special) && !last.text.is_empty() {
                 parts.push_back(CommandPart {
                     text: String::from(char),
                     part_type: CommandPartType::Special,
-                });
-                parts.push_back(CommandPart {
-                    text: String::new(),
-                    part_type: CommandPartType::Keyword,
                 });
                 continue;
             }
             last.part_type = CommandPartType::Special;
             last.text.insert(last.text.len(), char);
-            parts.push_back(CommandPart {
-                text: String::new(),
-                part_type: CommandPartType::Keyword,
-            });
             continue;
+        }
+        if matches!(last.part_type,CommandPartType::Special) {
+        	parts.push_back(CommandPart {
+            		text: String::from(char),
+            		part_type: CommandPartType::RegularArg,
+           
+        	});
+        	last_char_was_backslash = false;
+        	continue;
         }
         last.text.insert(last.text.len(), char);
         last_char_was_backslash = false;
     }
+    let mut make_keyword = true;
+    for part in parts.iter_mut() {
+    	if make_keyword && matches!(part.part_type, CommandPartType::RegularArg)  && !part.text.trim().is_empty(){
+    		make_keyword = false;
+    		part.part_type = CommandPartType::Keyword;
+    	} else if matches!(part.part_type, CommandPartType::Special) {
+    		make_keyword = true;
+    	}
+    } 
     parts
 }
 
