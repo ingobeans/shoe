@@ -2,7 +2,7 @@ use std::{
     collections::VecDeque,
     error::Error,
     fs,
-    io::{stdout, Read, Write},
+    io::{Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -12,7 +12,7 @@ use crossterm::{
     terminal,
 };
 
-use crate::consts;
+use crate::utils::{Theme, THEMES};
 
 fn ls(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     let items = fs::read_dir(context.args.front().unwrap_or(&"."))?;
@@ -32,7 +32,10 @@ fn ls(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
             Err(_) => Err(std::io::Error::other("Path name couldn't be read"))?,
         }
     }
-    queue!(context.stdout, SetForegroundColor(consts::PRIMARY_COLOR))?;
+    queue!(
+        context.stdout,
+        SetForegroundColor(context.theme.primary_color)
+    )?;
     for dir in dirs {
         writeln!(context.stdout, "{}", dir)?;
     }
@@ -167,27 +170,46 @@ fn mkdir(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> 
     fs::create_dir_all(path)?;
     Ok(CommandResult::Lovely)
 }
+fn theme(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+    if context.args.len() != 1 {
+        writeln!(context.stdout, "Usage: 'theme <theme index>'")?;
+        writeln!(
+            context.stdout,
+            "Theme index should be a number 0-{} (inclusive)",
+            THEMES.len() - 1
+        )?;
+        Ok(CommandResult::Lovely)
+    } else {
+        let index = context.args[0].parse()?;
+        Ok(CommandResult::UpdateTheme(index))
+    }
+}
 
-pub fn execute_command(keyword: &str, context: &mut CommandContext) -> CommandResult {
+pub fn execute_command(
+    keyword: &str,
+    context: &mut CommandContext,
+) -> Result<CommandResult, Box<dyn Error>> {
     match keyword {
-        "ls" => handle_result(ls(context)),
-        "cd" => handle_result(cd(context)),
-        "pwd" => handle_result(pwd(context)),
-        "echo" => handle_result(echo(context)),
-        "cls" => handle_result(cls(context)),
-        "cat" => handle_result(cat(context)),
-        "cp" => handle_result(cp(context)),
-        "mv" => handle_result(mv(context)),
-        "rm" => handle_result(rm(context)),
-        "help" => handle_result(help(context)),
-        "mkdir" => handle_result(mkdir(context)),
-        "exit" => CommandResult::Exit,
-        _ => CommandResult::NotACommand,
+        "ls" => ls(context),
+        "cd" => cd(context),
+        "pwd" => pwd(context),
+        "echo" => echo(context),
+        "cls" => cls(context),
+        "cat" => cat(context),
+        "cp" => cp(context),
+        "mv" => mv(context),
+        "rm" => rm(context),
+        "help" => help(context),
+        "mkdir" => mkdir(context),
+        "theme" => theme(context),
+        "exit" => Ok(CommandResult::Exit),
+        _ => Ok(CommandResult::NotACommand),
     }
 }
 
 pub struct CommandContext<'a> {
     pub args: &'a VecDeque<&'a str>,
+    pub theme: &'a Theme,
     pub stdout: &'a mut Vec<u8>,
 }
 
@@ -195,19 +217,8 @@ pub enum CommandResult {
     Lovely,
     Exit,
     UpdateCwd,
-    Error,
+    UpdateTheme(usize),
     NotACommand,
-}
-
-pub fn handle_result(result: Result<CommandResult, Box<dyn Error>>) -> CommandResult {
-    match result {
-        Err(error) => {
-            let _ = queue!(stdout(), SetForegroundColor(consts::ERR_COLOR));
-            println!("{}", error);
-            CommandResult::Error
-        }
-        Ok(result) => result,
-    }
 }
 
 fn copy_dir(source: impl AsRef<Path>, dest: impl AsRef<Path>) -> std::io::Result<()> {

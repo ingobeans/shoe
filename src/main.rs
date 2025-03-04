@@ -14,8 +14,9 @@ use std::{
     path::{Path, PathBuf},
     process::{self, Stdio},
 };
+use utils::{Theme, THEMES};
 mod commands;
-mod consts;
+mod utils;
 
 /// Function parse line to arguments, with support for quote enclosures
 ///
@@ -335,10 +336,11 @@ struct Command<'a> {
     input_modifier: CommandInputModifier,
     run_condition: RunCondition,
 }
-struct Shoe {
+struct Shoe<'a> {
     history_path: Option<String>,
     history: Vec<String>,
     history_index: usize,
+    theme: &'a Theme,
     running: bool,
     listening: bool,
     cwd: PathBuf,
@@ -349,7 +351,7 @@ struct Shoe {
     last_input_before_autocomplete: Option<String>,
 }
 
-impl Shoe {
+impl Shoe<'_> {
     fn new(history_path: Option<String>, rc: Vec<String>) -> Result<Self> {
         let history: Vec<String>;
         if let Some(history_path) = &history_path {
@@ -377,6 +379,7 @@ impl Shoe {
             history_path,
             history,
             history_index,
+            theme: &THEMES[0],
             running: false,
             listening: false,
             cwd,
@@ -467,32 +470,35 @@ impl Shoe {
             let mut output_buf = Vec::new();
             let mut context = CommandContext {
                 args: &command.args,
+                theme: self.theme,
                 stdout: &mut output_buf,
             };
             let result = commands::execute_command(&command.keyword, &mut context);
             let mut not_a_builtin_command = false;
 
-            last_success = Some(true);
-            match result {
-                commands::CommandResult::Error => {
-                    last_success = Some(false);
-                }
-                commands::CommandResult::Exit => {
-                    self.listening = false;
-                    self.running = false;
-                    return Ok(());
-                }
-                commands::CommandResult::UpdateCwd => self.update_cwd()?,
-                commands::CommandResult::Lovely => {
-                    if let CommandOutputModifier::Default = command.output_modifier {
-                        // write output
-                        stdout().lock().write_all(&output_buf)?;
+            last_success = Some(result.is_ok());
+            if let Ok(result) = result {
+                match result {
+                    commands::CommandResult::Exit => {
+                        self.listening = false;
+                        self.running = false;
+                        return Ok(());
                     }
-                    let stripped_output = strip_ansi_escapes::strip(output_buf);
-                    stdout_data = Some(stripped_output);
-                }
-                commands::CommandResult::NotACommand => {
-                    not_a_builtin_command = true;
+                    commands::CommandResult::UpdateCwd => self.update_cwd()?,
+                    commands::CommandResult::UpdateTheme(new_index) => {
+                        self.theme = &THEMES[new_index];
+                    }
+                    commands::CommandResult::Lovely => {
+                        if let CommandOutputModifier::Default = command.output_modifier {
+                            // write output
+                            stdout().lock().write_all(&output_buf)?;
+                        }
+                        let stripped_output = strip_ansi_escapes::strip(output_buf);
+                        stdout_data = Some(stripped_output);
+                    }
+                    commands::CommandResult::NotACommand => {
+                        not_a_builtin_command = true;
+                    }
                 }
             }
 
@@ -565,7 +571,7 @@ impl Shoe {
                 }
                 if !any_worked {
                     last_success = Some(false);
-                    queue!(stdout(), SetForegroundColor(consts::ERR_COLOR)).unwrap();
+                    queue!(stdout(), SetForegroundColor(self.theme.err_color)).unwrap();
                     println!("file/command '{}' not found! :(", command.keyword);
                 }
             }
@@ -773,10 +779,10 @@ impl Shoe {
         let parts = parse_parts(&self.input_text, true);
         for part in parts {
             let color = match part.part_type {
-                CommandPartType::Keyword => consts::PRIMARY_COLOR,
-                CommandPartType::QuotesArg => consts::SECONDARY_COLOR,
+                CommandPartType::Keyword => self.theme.primary_color,
+                CommandPartType::QuotesArg => self.theme.secondary_color,
                 CommandPartType::RegularArg => Color::White,
-                CommandPartType::Special => consts::SECONDARY_COLOR,
+                CommandPartType::Special => self.theme.secondary_color,
             };
             queue!(stdout(), SetForegroundColor(color))?;
             print!("{}", part.text);
@@ -919,7 +925,7 @@ impl Shoe {
         }
 
         if let Some(err) = err {
-            let _ = queue!(stdout(), SetForegroundColor(consts::ERR_COLOR));
+            let _ = queue!(stdout(), SetForegroundColor(self.theme.err_color));
             println!("{}", err);
         }
 
@@ -927,6 +933,14 @@ impl Shoe {
         Ok(())
     }
     fn start(&mut self) -> Result<()> {
+        // print banner
+        queue!(stdout(), SetForegroundColor(self.theme.primary_color)).unwrap();
+        print!("shoe ");
+        queue!(stdout(), SetForegroundColor(Color::White)).unwrap();
+        print!("[v{}]\n\n", env!("CARGO_PKG_VERSION"));
+        stdout().flush().unwrap();
+
+        // run
         self.running = true;
         while self.running {
             let command = &self.listen()?;
@@ -938,11 +952,11 @@ impl Shoe {
         enable_raw_mode()?;
         self.listening = true;
 
-        queue!(stdout(), SetForegroundColor(consts::PRIMARY_COLOR))?;
+        queue!(stdout(), SetForegroundColor(self.theme.primary_color))?;
         print!("[");
         queue!(stdout(), SetForegroundColor(Color::White))?;
         print!("{}", self.cwd_to_str()?);
-        queue!(stdout(), SetForegroundColor(consts::PRIMARY_COLOR))?;
+        queue!(stdout(), SetForegroundColor(self.theme.primary_color))?;
         print!("]> ");
 
         stdout().flush()?;
@@ -990,23 +1004,17 @@ fn main() {
                 use_rc = false;
             }
             "-h" | "--help" => {
-                println!("{}", consts::HELP_MESSAGE);
+                println!("{}", utils::HELP_MESSAGE);
                 return;
             }
             _ => {
-                queue!(stdout(), SetForegroundColor(consts::ERR_COLOR)).unwrap();
+                queue!(stdout(), SetForegroundColor(utils::DEFAULT_ERR_COLOR)).unwrap();
                 println!("unknown arg: '{}'. do -h for help", arg);
                 queue!(stdout(), SetForegroundColor(Color::Reset)).unwrap();
                 return;
             }
         }
     }
-
-    queue!(stdout(), SetForegroundColor(consts::PRIMARY_COLOR)).unwrap();
-    print!("shoe ");
-    queue!(stdout(), SetForegroundColor(Color::White)).unwrap();
-    print!("[v{}]\n\n", env!("CARGO_PKG_VERSION"));
-    stdout().flush().unwrap();
 
     let path: Option<String>;
     if use_history {

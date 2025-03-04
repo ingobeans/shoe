@@ -7,5 +7,6 @@ cat		print contents of file
 cp		copy file/dir
 mv		move file/dir
 rm		delete file/dir
+theme		change active shell theme
 help		print this
 exit		exit
