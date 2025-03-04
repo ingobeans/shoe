@@ -477,28 +477,35 @@ impl Shoe<'_> {
             let mut not_a_builtin_command = false;
 
             last_success = Some(result.is_ok());
-            if let Ok(result) = result {
-                match result {
-                    commands::CommandResult::Exit => {
-                        self.listening = false;
-                        self.running = false;
-                        return Ok(());
-                    }
-                    commands::CommandResult::UpdateCwd => self.update_cwd()?,
-                    commands::CommandResult::UpdateTheme(new_index) => {
-                        self.theme = &THEMES[new_index];
-                    }
-                    commands::CommandResult::Lovely => {
-                        if let CommandOutputModifier::Default = command.output_modifier {
-                            // write output
-                            stdout().lock().write_all(&output_buf)?;
+            match result {
+                Ok(result) => {
+                    match result {
+                        commands::CommandResult::Exit => {
+                            self.listening = false;
+                            self.running = false;
+                            return Ok(());
                         }
-                        let stripped_output = strip_ansi_escapes::strip(output_buf);
-                        stdout_data = Some(stripped_output);
+                        commands::CommandResult::UpdateCwd => self.update_cwd()?,
+                        commands::CommandResult::UpdateTheme(new_index) => {
+                            self.theme = &THEMES[new_index];
+                        }
+                        commands::CommandResult::Lovely => {
+                            if let CommandOutputModifier::Default = command.output_modifier {
+                                // write output
+                                stdout().lock().write_all(&output_buf)?;
+                            }
+                            let stripped_output = strip_ansi_escapes::strip(output_buf);
+                            stdout_data = Some(stripped_output);
+                        }
+                        commands::CommandResult::NotACommand => {
+                            not_a_builtin_command = true;
+                        }
                     }
-                    commands::CommandResult::NotACommand => {
-                        not_a_builtin_command = true;
-                    }
+                }
+                Err(error) => {
+                    queue!(stdout(), SetForegroundColor(self.theme.err_color))?;
+                    println!("{}", error);
+                    continue;
                 }
             }
 
