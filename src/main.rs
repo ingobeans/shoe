@@ -61,7 +61,7 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
             last_char_was_backslash = false;
             continue;
         }
-        if (char == ';' || char == '|' || char == '>' || char == '&')
+        if (char == ';' || char == '|' || char == '>' || char == '&' || char == '<')
             && !in_quote
             && !last_char_was_backslash
         {
@@ -305,16 +305,22 @@ fn absolute_pathbuf_to_string(input: PathBuf) -> String {
     parts.join("/")
 }
 
+enum CommandInputModifier {
+    /// Read command input from file
+    ReadFrom(String),
+    /// Command input has no modifier.
+    Default,
+}
 enum CommandOutputModifier {
     /// Command output has been piped.
     Piped,
     /// Command output has been redirected to a file. (path,append)
-    Redirected(String, bool),
-    /// Command has no modifier.
-    None,
+    WriteTo(String, bool),
+    /// Command output has no modifier.
+    Default,
 }
 
-enum ExitType {
+enum RunCondition {
     Any,
     Success,
     Fail,
@@ -323,8 +329,9 @@ enum ExitType {
 struct Command<'a> {
     keyword: String,
     args: VecDeque<&'a str>,
-    modifier: CommandOutputModifier,
-    run_on: ExitType,
+    output_modifier: CommandOutputModifier,
+    input_modifier: CommandInputModifier,
+    run_condition: RunCondition,
 }
 struct Shoe {
     history_path: Option<String>,
@@ -414,135 +421,164 @@ impl Shoe {
         // run each command sequentially
         for command in &commands {
             queue!(stdout(), SetForegroundColor(Color::Reset))?;
-            match command.run_on {
-                ExitType::Success => {
+            // check commands run condition
+            // ex. for when doing `echo "do something which may fail" && echo it succeeded!`
+            match command.run_condition {
+                RunCondition::Success => {
                     if let Some(last_success) = last_success {
                         if !last_success {
                             continue;
                         }
                     }
                 }
-                ExitType::Fail => {
+                RunCondition::Fail => {
                     if let Some(last_success) = last_success {
                         if last_success {
                             continue;
                         }
                     }
                 }
-                ExitType::Any => {}
+                RunCondition::Any => {}
+            }
+            // what to use as stdin (if none, inherit)
+            let mut stdin_data: Option<Vec<u8>> = None;
+
+            // if there was output piped from last command, set stdin_data to that
+            if let Some(buf) = last_piped_output {
+                stdin_data = Some(buf);
+                last_piped_output = None;
+            } else {
+                // otherwise, handle input modifiers
+                match &command.input_modifier {
+                    // if stdin is derived from file contents
+                    CommandInputModifier::ReadFrom(path) => {
+                        stdin_data = Some(std::fs::read(path)?);
+                    }
+                    _ => {}
+                }
             }
 
-            // try running built in commands
+            // what got outputed, (if none, it was written directly to inherited stdout)
+            let mut stdout_data: Option<Vec<u8>> = None;
+
+            // try running built in command
             let mut output_buf = Vec::new();
             let mut context = CommandContext {
                 args: &command.args,
                 stdout: &mut output_buf,
             };
             let result = commands::execute_command(&command.keyword, &mut context);
-            let mut builtin_command_failed = false;
+            let mut not_a_builtin_command = false;
+
+            last_success = Some(true);
             match result {
                 commands::CommandResult::Error => {
-                    builtin_command_failed = true;
+                    last_success = Some(false);
                 }
                 commands::CommandResult::Exit => {
                     self.listening = false;
                     self.running = false;
+                    return Ok(());
                 }
                 commands::CommandResult::UpdateCwd => self.update_cwd()?,
-                _ => {}
-            }
-            // if command was recognized as built in
-            if !matches!(result, commands::CommandResult::NotACommand) {
-                match &command.modifier {
-                    CommandOutputModifier::Piped => {
-                        let stripped = strip_ansi_escapes::strip(output_buf);
-                        last_piped_output = Some(stripped);
-                    }
-                    CommandOutputModifier::Redirected(path, append) => {
-                        let stripped = strip_ansi_escapes::strip(output_buf);
-                        write_file(path, stripped, *append)?;
-                    }
-                    _ => {
+                commands::CommandResult::Lovely => {
+                    if let CommandOutputModifier::Default = command.output_modifier {
                         // write output
                         stdout().lock().write_all(&output_buf)?;
                     }
+                    let stripped_output = strip_ansi_escapes::strip(output_buf);
+                    stdout_data = Some(stripped_output);
                 }
-                last_success = Some(!builtin_command_failed);
-                continue;
+                commands::CommandResult::NotACommand => {
+                    not_a_builtin_command = true;
+                }
             }
 
-            // if on windows, also try running the keyword with the .bat and .cmd extensions if the regular fails
-            let keywords: Vec<String>;
-            let mut any_worked = false;
-            if env::consts::OS == "windows" {
-                if !command.keyword.contains(".") {
-                    keywords = vec![
-                        command.keyword.to_string(),
-                        command.keyword.to_string() + ".bat",
-                        command.keyword.to_string() + ".cmd",
-                    ]
+            // if command isnt a builtin, run process
+            if not_a_builtin_command {
+                // if on windows, also try running the keyword with the .bat and .cmd extensions if the regular fails
+                let keywords: Vec<String>;
+                let mut any_worked = false;
+                if env::consts::OS == "windows" {
+                    if !command.keyword.contains(".") {
+                        keywords = vec![
+                            command.keyword.to_string(),
+                            command.keyword.to_string() + ".bat",
+                            command.keyword.to_string() + ".cmd",
+                        ]
+                    } else {
+                        keywords = vec![command.keyword.to_string()];
+                    }
                 } else {
                     keywords = vec![command.keyword.to_string()];
                 }
-            } else {
-                keywords = vec![command.keyword.to_string()];
-            }
 
-            for keyword in keywords {
-                let mut process = process::Command::new(&keyword);
-                process.args(&command.args);
+                for keyword in keywords {
+                    let mut process = process::Command::new(&keyword);
+                    process.args(&command.args);
 
-                if last_piped_output.is_some() {
-                    process.stdin(Stdio::piped());
-                };
-
-                if !matches!(command.modifier, CommandOutputModifier::None) {
-                    process.stdout(Stdio::piped());
-                }
-
-                let Ok(mut process) = process.spawn() else {
-                    continue;
-                };
-                any_worked = true;
-
-                if let Some(output) = &last_piped_output {
-                    if let Some(stdin) = &mut process.stdin {
-                        stdin.write_all(output)?;
-                        last_piped_output = None;
+                    // if there's stdin data, set process' stdin to piped
+                    if stdin_data.is_some() {
+                        process.stdin(Stdio::piped());
                     }
-                }
-                let success: bool;
 
-                match &command.modifier {
-                    CommandOutputModifier::Piped => {
-                        success = process.wait()?.success();
-
-                        last_piped_output = Some({
-                            let mut buf: Vec<u8> = Vec::new();
-                            process.stdout.take().unwrap().read_to_end(&mut buf)?;
-                            let stripped = strip_ansi_escapes::strip(buf);
-                            stripped
-                        });
+                    // if the command's output modifier is not default, set process' stdout to be piped (so we can handle it later)
+                    if !matches!(command.output_modifier, CommandOutputModifier::Default) {
+                        process.stdout(Stdio::piped());
                     }
-                    CommandOutputModifier::Redirected(path, append) => {
-                        success = process.wait()?.success();
 
+                    // if process cant be spawned (path doesnt exist), continue
+                    // on windows this will mean testing the next path (since it tests both the path, the path + ".bat" and the path + ".cmd")
+                    // otherwise it will just move on to the next command
+                    let Ok(mut process) = process.spawn() else {
+                        continue;
+                    };
+
+                    // process was created successfully
+                    any_worked = true;
+
+                    if let Some(buf) = stdin_data {
+                        if let Some(stdin) = &mut process.stdin {
+                            stdin.write_all(&buf)?;
+                        }
+                    }
+                    let success = process.wait()?.success();
+
+                    // if process has readable stdout, strip it from ansi codes and store here
+                    let stripped_output: Option<Vec<u8>> = if let Some(stdout) = &mut process.stdout
+                    {
                         let mut buf: Vec<u8> = Vec::new();
-                        process.stdout.take().unwrap().read_to_end(&mut buf)?;
+                        stdout.read_to_end(&mut buf)?;
                         let stripped = strip_ansi_escapes::strip(buf);
-                        write_file(path, stripped, *append)?;
-                    }
-                    _ => {
-                        success = process.wait()?.success();
+                        Some(stripped)
+                    } else {
+                        None
+                    };
+
+                    // set success state to the process' success state (its error code being 0)
+                    last_success = Some(success);
+
+                    stdout_data = stripped_output;
+                    break;
+                }
+                if !any_worked {
+                    last_success = Some(false);
+                    queue!(stdout(), SetForegroundColor(consts::ERR_COLOR)).unwrap();
+                    println!("file/command '{}' not found! :(", command.keyword);
+                }
+            }
+
+            // handle command output
+            match &command.output_modifier {
+                CommandOutputModifier::Piped => {
+                    last_piped_output = stdout_data;
+                }
+                CommandOutputModifier::WriteTo(path, append) => {
+                    if let Some(stdout_data) = stdout_data {
+                        write_file(path, stdout_data, *append)?;
                     }
                 }
-                last_success = Some(success);
-                break;
-            }
-            if !any_worked {
-                last_success = Some(false);
-                queue!(stdout(), SetForegroundColor(consts::ERR_COLOR)).unwrap();
-                println!("file/command '{}' not found! :(", command.keyword);
+                _ => {}
             }
         }
         Ok(())
@@ -769,7 +805,7 @@ impl Shoe {
         let mut commands: Vec<Command> = Vec::new();
         let mut current_command: Option<Command> = None;
         let mut index = 0;
-        let mut run_on = ExitType::Any;
+        let mut next_run_condition = RunCondition::Any;
 
         while index < parts.len() {
             let part = &parts[index];
@@ -783,24 +819,29 @@ impl Shoe {
                         }
                         "&&" => {
                             done = true;
-                            run_on = ExitType::Success;
+                            next_run_condition = RunCondition::Success;
                         }
                         "||" => {
                             done = true;
-                            run_on = ExitType::Fail;
+                            next_run_condition = RunCondition::Fail;
                         }
                         "|" => {
                             done = true;
-                            command.modifier = CommandOutputModifier::Piped;
+                            command.output_modifier = CommandOutputModifier::Piped;
                         }
                         ">" => {
-                            command.modifier =
-                                CommandOutputModifier::Redirected(parts[index].text.clone(), false);
+                            command.output_modifier =
+                                CommandOutputModifier::WriteTo(parts[index].text.clone(), false);
                             index += 1;
                         }
                         ">>" => {
-                            command.modifier =
-                                CommandOutputModifier::Redirected(parts[index].text.clone(), true);
+                            command.output_modifier =
+                                CommandOutputModifier::WriteTo(parts[index].text.clone(), true);
+                            index += 1;
+                        }
+                        "<" => {
+                            command.input_modifier =
+                                CommandInputModifier::ReadFrom(parts[index].text.clone());
                             index += 1;
                         }
                         _ => {
@@ -815,10 +856,11 @@ impl Shoe {
                 current_command = Some(Command {
                     keyword: part.text.clone(),
                     args: VecDeque::new(),
-                    modifier: CommandOutputModifier::None,
-                    run_on,
+                    output_modifier: CommandOutputModifier::Default,
+                    input_modifier: CommandInputModifier::Default,
+                    run_condition: next_run_condition,
                 });
-                run_on = ExitType::Any;
+                next_run_condition = RunCondition::Any;
             }
 
             if done || index == parts.len() {
