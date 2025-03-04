@@ -857,7 +857,7 @@ impl Shoe<'_> {
         Ok(())
     }
     fn get_suggestion(&self) -> Option<&String> {
-        if self.input_text.is_empty() {
+        if self.input_text.trim().is_empty() {
             return None;
         }
         for index in 0..self.history.len() {
