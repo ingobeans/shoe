@@ -172,16 +172,32 @@ fn mkdir(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> 
 }
 fn theme(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     if context.args.len() != 1 {
-        writeln!(context.stdout, "Usage: 'theme <theme index>'")?;
-        writeln!(
-            context.stdout,
-            "Theme index should be a number 0-{} (inclusive)",
-            THEMES.len() - 1
-        )?;
+        writeln!(context.stdout, "Usage: 'theme <theme name>'")?;
+        writeln!(context.stdout, "Available themes: ")?;
+        for theme in THEMES {
+            // if theme is active theme, print with color
+            if std::ptr::eq(theme, context.theme) {
+                queue!(
+                    context.stdout,
+                    SetForegroundColor(context.theme.primary_color)
+                )?;
+                writeln!(context.stdout, "\t* {}", theme.name)?;
+                queue!(context.stdout, SetForegroundColor(Color::Reset))?;
+            } else {
+                writeln!(context.stdout, "\t* {}", theme.name)?;
+            }
+        }
         Ok(CommandResult::Lovely)
     } else {
-        let index = context.args[0].parse()?;
-        Ok(CommandResult::UpdateTheme(index))
+        let theme_name = context.args[0];
+
+        for (index, theme) in THEMES.iter().enumerate() {
+            if theme.name == theme_name {
+                return Ok(CommandResult::UpdateTheme(index));
+            }
+        }
+        let message = format!("no theme by name '{}'", theme_name);
+        Err(Box::new(std::io::Error::other(message)))
     }
 }
 
@@ -209,7 +225,7 @@ pub fn execute_command(
 
 pub struct CommandContext<'a> {
     pub args: &'a VecDeque<&'a str>,
-    pub theme: &'a Theme,
+    pub theme: &'a Theme<'a>,
     pub stdout: &'a mut Vec<u8>,
 }
 

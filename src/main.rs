@@ -340,7 +340,7 @@ struct Shoe<'a> {
     history_path: Option<String>,
     history: Vec<String>,
     history_index: usize,
-    theme: &'a Theme,
+    theme: &'a Theme<'a>,
     running: bool,
     listening: bool,
     cwd: PathBuf,
