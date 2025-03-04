@@ -33,61 +33,62 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
     for char in text.chars() {
         let last = parts.back_mut().unwrap();
 
-        if char == '\\' {
-            if include_seperators || last_char_was_backslash {
-                last.text.insert(last.text.len(), char);
-            }
-            last_char_was_backslash = !last_char_was_backslash;
-            continue;
-        }
-        if char == '"' && !last_char_was_backslash && (in_quote || last.text.is_empty()) {
-            in_quote = !in_quote;
-            if in_quote {
-                last.part_type = CommandPartType::QuotesArg;
-            }
-            if !include_seperators {
-                last_char_was_backslash = false;
+        // set `last_char_was_backslash` to false
+        // while storing the original value in new `last_was_backslash`
+        let last_was_backslash = last_char_was_backslash;
+        last_char_was_backslash = false;
+
+        match char {
+            '\\' => {
+                if include_seperators || last_was_backslash {
+                    last.text.insert(last.text.len(), char);
+                }
+                last_char_was_backslash = !last_was_backslash;
                 continue;
             }
-        }
-        if char == ' ' && !in_quote {
-            if include_seperators {
-                last.text.insert(last.text.len(), char);
+            '"' if !last_was_backslash && (in_quote || last.text.is_empty()) => {
+                in_quote = !in_quote;
+                if in_quote {
+                    last.part_type = CommandPartType::QuotesArg;
+                }
+                if !include_seperators {
+                    continue;
+                }
             }
-            parts.push_back(CommandPart {
-                text: String::new(),
-                part_type: CommandPartType::RegularArg,
-            });
-            last_char_was_backslash = false;
-            continue;
-        }
-        if (char == ';' || char == '|' || char == '>' || char == '&' || char == '<')
-            && !in_quote
-            && !last_char_was_backslash
-        {
-            last_char_was_backslash = false;
-            if !matches!(last.part_type, CommandPartType::Special) && !last.text.is_empty() {
+            ' ' if !in_quote => {
+                if include_seperators {
+                    last.text.insert(last.text.len(), char);
+                }
                 parts.push_back(CommandPart {
-                    text: String::from(char),
-                    part_type: CommandPartType::Special,
+                    text: String::new(),
+                    part_type: CommandPartType::RegularArg,
                 });
                 continue;
             }
-            last.part_type = CommandPartType::Special;
-            last.text.insert(last.text.len(), char);
-            continue;
+            ';' | '|' | '>' | '&' | '<' if !in_quote && !last_was_backslash => {
+                if !matches!(last.part_type, CommandPartType::Special) && !last.text.is_empty() {
+                    parts.push_back(CommandPart {
+                        text: String::from(char),
+                        part_type: CommandPartType::Special,
+                    });
+                    continue;
+                }
+                last.part_type = CommandPartType::Special;
+                last.text.insert(last.text.len(), char);
+                continue;
+            }
+            _ => {}
         }
         if matches!(last.part_type, CommandPartType::Special) {
             parts.push_back(CommandPart {
                 text: String::from(char),
                 part_type: CommandPartType::RegularArg,
             });
-            last_char_was_backslash = false;
             continue;
         }
         last.text.insert(last.text.len(), char);
-        last_char_was_backslash = false;
     }
+    // make first non empty regular arg after each seperator a keyword
     let mut make_keyword = true;
     for part in parts.iter_mut() {
         if make_keyword
@@ -100,6 +101,7 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
             make_keyword = true;
         }
     }
+    // return parts
     parts
 }
 
