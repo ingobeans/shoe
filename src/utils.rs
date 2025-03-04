@@ -2,7 +2,7 @@ use crossterm::style::Color;
 
 pub static DEFAULT_ERR_COLOR: Color = Color::Red;
 
-pub static HELP_MESSAGE: &'static str = "
+pub static HELP_MESSAGE: &str = "
 --help (-h)   - displays this help message
 --no-history  - dont store history in ~/.shoehistory
 --no-rc       - dont run startup commands from ~/.shoerc";

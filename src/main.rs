@@ -3,7 +3,7 @@ use crossterm::{
     cursor::{MoveLeft, MoveRight},
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     queue,
-    style::{Color, SetForegroundColor},
+    style::{Color, SetAttribute, SetForegroundColor},
     terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
 };
 use relative_path::RelativePathBuf;
@@ -357,7 +357,7 @@ impl Shoe<'_> {
         let history: Vec<String>;
         if let Some(history_path) = &history_path {
             let history_text =
-                std::fs::read_to_string(&history_path).expect("Couldn't read ~/.shoehistory");
+                std::fs::read_to_string(history_path).expect("Couldn't read ~/.shoehistory");
             history = history_text
                 .split('\n')
                 .filter_map(|line| {
@@ -461,7 +461,7 @@ impl Shoe<'_> {
                     CommandInputModifier::ReadFrom(path) => {
                         stdin_data = Some(std::fs::read(path)?);
                     }
-                    _ => {}
+                    CommandInputModifier::Default => {}
                 }
             }
 
@@ -816,9 +816,19 @@ impl Shoe<'_> {
         if should_show_suggestion {
             let suggestion = self.get_suggestion();
             if let Some(suggestion) = suggestion {
+                // cut suggestion to only the new part
                 let cut_suggestion = &suggestion.clone()[self.input_text.len()..];
+                // make text dark grey and italic
                 queue!(stdout(), SetForegroundColor(Color::DarkGrey))?;
+                queue!(stdout(), SetAttribute(crossterm::style::Attribute::Italic))?;
+                // print suggestion
                 print!("{}", cut_suggestion);
+                // restore text
+                queue!(
+                    stdout(),
+                    SetAttribute(crossterm::style::Attribute::NoItalic)
+                )?;
+                // increase cursor steps so cursor is properly moved back to the beginning of the line
                 cursor_steps += cut_suggestion.chars().count();
             }
         }
@@ -1061,31 +1071,29 @@ fn main() {
         }
     }
 
-    let path: Option<String>;
-    if use_history {
+    let path: Option<String> = if use_history {
         let history_path = shellexpand::tilde("~/.shoehistory").to_string();
         if std::fs::metadata(&history_path).is_err() {
             std::fs::write(&history_path, "").expect("Couldn't create ~/.shoehistory");
         }
-        path = Some(history_path);
+        Some(history_path)
     } else {
-        path = None;
-    }
+        None
+    };
 
-    let rc: Vec<String>;
-    if use_rc {
+    let rc: Vec<String> = if use_rc {
         let rc_path = shellexpand::tilde("~/.shoerc").to_string();
         if std::fs::metadata(&rc_path).is_err() {
             std::fs::write(&rc_path, "").expect("Couldn't create ~/.shoerc");
         }
-        rc = std::fs::read_to_string(&rc_path)
+        std::fs::read_to_string(&rc_path)
             .expect("Couldn't read ~/.shoerc")
             .split('\n')
             .map(str::to_string)
             .collect()
     } else {
-        rc = Vec::new();
-    }
+        Vec::new()
+    };
 
     let mut shoe = Shoe::new(path, rc).unwrap();
     shoe.start().unwrap();
