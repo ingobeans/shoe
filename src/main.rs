@@ -343,6 +343,7 @@ struct Shoe<'a> {
     theme: &'a Theme<'a>,
     running: bool,
     listening: bool,
+    use_suggestions: bool,
     cwd: PathBuf,
     input_text: String,
     cursor_pos: usize,
@@ -382,6 +383,7 @@ impl Shoe<'_> {
             theme: &THEMES[0],
             running: false,
             listening: false,
+            use_suggestions: true,
             cwd,
             input_text: String::new(),
             cursor_pos: 0,
@@ -759,6 +761,11 @@ impl Shoe<'_> {
                 KeyCode::Right => {
                     self.cursor_pos += 1;
                     if self.cursor_pos > self.input_text.chars().count() {
+                        // if we press right arrow at the last character, fill in suggestion
+                        if let Some(suggestion) = self.get_suggestion() {
+                            self.input_text = suggestion.clone();
+                        }
+                        // move to last char
                         self.cursor_pos = self.input_text.chars().count();
                     }
                 }
@@ -793,15 +800,32 @@ impl Shoe<'_> {
             };
             queue!(stdout(), SetForegroundColor(color))?;
             print!("{}", part.text);
-            queue!(stdout(), SetForegroundColor(Color::Reset))?;
         }
         Ok(())
     }
     fn update(&self) -> Result<()> {
         queue!(stdout(), Clear(ClearType::UntilNewLine))?;
+
         self.print_text()?;
-        if self.input_text.chars().count() != 0 {
-            queue!(stdout(), MoveLeft((self.input_text.chars().count()) as u16))?;
+        let mut cursor_steps = self.input_text.chars().count();
+
+        // dont show suggestion when self.listening is false, i.e. the user just pressed enter
+        // so suggestions for previous entries are hidden
+        let should_show_suggestion = self.listening && self.use_suggestions;
+
+        if should_show_suggestion {
+            let suggestion = self.get_suggestion();
+            if let Some(suggestion) = suggestion {
+                let cut_suggestion = &suggestion.clone()[self.input_text.len()..];
+                queue!(stdout(), SetForegroundColor(Color::DarkGrey))?;
+                print!("{}", cut_suggestion);
+                cursor_steps += cut_suggestion.chars().count();
+            }
+        }
+        queue!(stdout(), SetForegroundColor(Color::Reset))?;
+
+        if !self.input_text.is_empty() {
+            queue!(stdout(), MoveLeft(cursor_steps as u16))?;
         }
 
         if self.cursor_pos != 0 {
@@ -815,6 +839,20 @@ impl Shoe<'_> {
         }
 
         Ok(())
+    }
+    fn get_suggestion(&self) -> Option<&String> {
+        if self.input_text.is_empty() {
+            return None;
+        }
+        for index in 0..self.history.len() {
+            // get items from history in reversed order
+            let item = &self.history[self.history.len() - 1 - index];
+
+            if item.starts_with(&self.input_text) {
+                return Some(item);
+            }
+        }
+        None
     }
     fn parts_to_commands_vec(parts: &VecDeque<CommandPart>) -> Result<Vec<Command>> {
         let mut commands: Vec<Command> = Vec::new();
