@@ -49,12 +49,18 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
             }
             '"' if !last_was_backslash && (in_quote || last.text.is_empty()) => {
                 in_quote = !in_quote;
+                if include_seperators {
+                    last.text.insert(last.text.len(), char);
+                }
                 if in_quote {
                     last.part_type = CommandPartType::QuotesArg;
+                } else {
+                    parts.push_back(CommandPart {
+                        text: String::new(),
+                        part_type: CommandPartType::RegularArg,
+                    });
                 }
-                if !include_seperators {
-                    continue;
-                }
+                continue;
             }
             ' ' if !in_quote => {
                 if include_seperators {
