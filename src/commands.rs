@@ -1,6 +1,5 @@
 use std::{
     collections::VecDeque,
-    error::Error,
     fs,
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -14,7 +13,7 @@ use crossterm::{
 
 use crate::utils::{Theme, THEMES};
 
-fn ls(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+fn ls(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
     let items = fs::read_dir(context.args.front().unwrap_or(&"."))?;
 
     let mut dirs = vec![];
@@ -46,7 +45,7 @@ fn ls(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     Ok(CommandResult::Lovely)
 }
 
-fn cd(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+fn cd(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
     let path = context.args.front();
     if let Some(path) = path {
         let path = shellexpand::tilde(path).to_string();
@@ -59,7 +58,7 @@ fn cd(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     Ok(CommandResult::UpdateCwd)
 }
 
-fn pwd(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+fn pwd(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
     writeln!(
         context.stdout,
         "{}",
@@ -69,14 +68,14 @@ fn pwd(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     )?;
     Ok(CommandResult::Lovely)
 }
-fn echo(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+fn echo(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
     queue!(context.stdout, SetForegroundColor(Color::Reset))?;
     for line in context.args {
         writeln!(context.stdout, "{}", line)?;
     }
     Ok(CommandResult::Lovely)
 }
-fn cls(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+fn cls(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
     execute!(
         context.stdout,
         cursor::MoveTo(0, 0),
@@ -84,7 +83,7 @@ fn cls(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     )?;
     Ok(CommandResult::Lovely)
 }
-fn cat(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+fn cat(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
     let path = context.args.front();
     match path {
         Some(path) => {
@@ -102,11 +101,11 @@ fn cat(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
 
     Ok(CommandResult::Lovely)
 }
-fn help(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+fn help(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
     writeln!(context.stdout, "{}", include_str!("help.txt"))?;
     Ok(CommandResult::Lovely)
 }
-fn cp(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+fn cp(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
     if context.args.len() != 2 {
         Err(std::io::Error::other("Usage: 'cp <source> <dest>'"))?;
     }
@@ -135,7 +134,7 @@ fn cp(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     }
     Ok(CommandResult::Lovely)
 }
-fn mv(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+fn mv(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
     if context.args.len() != 2 {
         Err(std::io::Error::other("Usage: 'mv <source> <dest>'"))?;
     }
@@ -149,7 +148,7 @@ fn mv(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     }
     Ok(CommandResult::Lovely)
 }
-fn rm(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+fn rm(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
     if context.args.len() != 1 {
         Err(std::io::Error::other("Usage: 'rm <target>'"))?;
     }
@@ -162,7 +161,7 @@ fn rm(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
     }
     Ok(CommandResult::Lovely)
 }
-fn mkdir(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+fn mkdir(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
     if context.args.len() != 1 {
         Err(std::io::Error::other("Usage: 'mkdir <path>'"))?;
     }
@@ -170,7 +169,7 @@ fn mkdir(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> 
     fs::create_dir_all(path)?;
     Ok(CommandResult::Lovely)
 }
-fn theme(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> {
+fn theme(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
     if context.args.len() != 1 {
         writeln!(context.stdout, "Usage: 'theme <theme name>'")?;
         writeln!(context.stdout, "Available themes: ")?;
@@ -197,14 +196,14 @@ fn theme(context: &mut CommandContext) -> Result<CommandResult, Box<dyn Error>> 
             }
         }
         let message = format!("no theme by name '{}'", theme_name);
-        Err(Box::new(std::io::Error::other(message)))
+        Err(std::io::Error::other(message))
     }
 }
 
 pub fn execute_command(
     keyword: &str,
     context: &mut CommandContext,
-) -> Result<CommandResult, Box<dyn Error>> {
+) -> Result<CommandResult, std::io::Error> {
     match keyword {
         "ls" => ls(context),
         "cd" => cd(context),
