@@ -86,7 +86,7 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
             }
             _ => {}
         }
-        if matches!(last.part_type, CommandPartType::Special) {
+        if let CommandPartType::Special = last.part_type {
             parts.push_back(CommandPart {
                 text: String::from(char),
                 part_type: CommandPartType::RegularArg,
@@ -98,14 +98,17 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
     // make first non empty regular arg after each seperator a keyword
     let mut make_keyword = true;
     for part in parts.iter_mut() {
-        if make_keyword
-            && matches!(part.part_type, CommandPartType::RegularArg)
-            && !part.text.trim().is_empty()
-        {
-            make_keyword = false;
-            part.part_type = CommandPartType::Keyword;
-        } else if matches!(part.part_type, CommandPartType::Special) {
-            make_keyword = true;
+        match part.part_type {
+            CommandPartType::RegularArg => {
+                if make_keyword && !part.text.trim().is_empty() {
+                    make_keyword = false;
+                    part.part_type = CommandPartType::Keyword;
+                }
+            }
+            CommandPartType::Special => {
+                make_keyword = true;
+            }
+            _ => {}
         }
     }
     // return parts
@@ -679,11 +682,15 @@ impl Shoe<'_> {
                     let Some((word_index, word)) = self.get_word_at_cursor() else {
                         break 'tab;
                     };
-                    let ends_with_quote =
-                        matches!(words[word_index].part_type, CommandPartType::QuotesArg)
-                            && words[word_index].text.ends_with('"');
-                    let starts_with_quote =
-                        matches!(words[word_index].part_type, CommandPartType::QuotesArg);
+                    let part_type = &words[word_index].part_type;
+
+                    // so we know if we need to strip before autocompletion and then re-add at the end
+                    // not all QuoteArgs end with quotes, as one isnt needed, so we need to check that it actually ends with one.
+                    let ends_with_quote = matches!(part_type, CommandPartType::QuotesArg)
+                        && words[word_index].text.ends_with('"');
+                    // all QuotesArgs will start with a quote
+                    let starts_with_quote = matches!(part_type, CommandPartType::QuotesArg);
+
                     let ends_with_space = words[word_index].text.ends_with(' ');
                     words.remove(word_index);
 
