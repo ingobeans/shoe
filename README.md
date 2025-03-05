@@ -1,4 +1,5 @@
 # shoe
+
 ![screenshot](https://github.com/user-attachments/assets/119bd733-ddd0-443d-8736-fa88ca2f2fb5)
 
 shoe: a shell!
@@ -11,21 +12,20 @@ i also ensured all builtin commands are simple but powerful. an example: to copy
 
 ## features
 
-* running commmands...? (both builtin and executables)
-* piping commands, redirecting output to files, etc
-* persistent command history (stored at ~/.shoehistory)
-* show inline suggestions (from history) which can be completed by pressing right arrow at the end of the line (like in powershell)
-* rc file (at ~/.shoerc)
-* using ~ in paths to cd to (even on windows)
-* tab completing paths!
+- running commmands! (both builtin and executables)
+- piping commands, redirecting output to files, etc
+- using ~ in paths to cd to and tab autocomplete
+- persistent command history (stored at ~/.shoehistory)
+- show inline suggestions (from history) which can be completed by pressing right arrow at the end of the line (like in powershell)
+- rc file (at ~/.shoerc)
 
 ## special characters
 
-* `;` or `&` - seperates two commands
-* `&&` - seperates two commands and only runs the seconds one if the first one succeeds
-* `||` - seperates two commands and only runs the seconds one if the first one fails
-* `>` - writes the output of the command to a file at the following path
-* `<` - reads stdin to the command from a file at the following path
-* `|` - pipes the output of a command to the next's stdin
-* `\` - escapes a special character
-* `"` - you can enclose an argument in quotes
+- `;` or `&` - seperates two commands
+- `&&` - seperates two commands and only runs the seconds one if the first one succeeds
+- `||` - seperates two commands and only runs the seconds one if the first one fails
+- `>` - writes the output of the command to a file at the following path
+- `<` - reads stdin to the command from a file at the following path
+- `|` - pipes the output of a command to the next's stdin
+- `\` - escapes a special character
+- `"` - you can enclose an argument in quotes
