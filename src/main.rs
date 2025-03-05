@@ -428,6 +428,51 @@ impl Shoe<'_> {
         self.current_dir_contents = list_dir(&self.cwd)?.into_iter().map(|f| f.1).collect();
         Ok(())
     }
+    fn generate_keyword_variants(&self, keyword: &String) -> Vec<String> {
+        // necessary function to ensure you can run files from their path or name if they're in the env PATH variable
+        // also on windows tries with different extensions
+        // (so you can type just 'example' instead of 'example.bat' or 'example.exe')
+        // a lot of this code may seem random but it is to fix very specific odd behaviours of windows
+        // but i tried to comment the specifics as much as possible
+        let is_path = keyword.contains('/') || keyword.contains('\\');
+        let keyword_has_file_extension = PathBuf::from(&keyword).extension().is_some();
+
+        let mut path_variants: Vec<String> = vec![keyword.to_string()];
+
+        // on windows try the keyword with more extensions
+        if env::consts::OS == "windows" && !keyword_has_file_extension {
+            path_variants.push(keyword.to_string() + ".exe");
+            path_variants.push(keyword.to_string() + ".bat");
+            path_variants.push(keyword.to_string() + ".cmd");
+        }
+
+        for variant in &path_variants {
+            // check if a file with keyword as path exists relative to cwd
+            let variant_as_pathbuf = RelativePathBuf::from(&variant);
+            let real_path = variant_as_pathbuf.to_logical_path(&self.cwd);
+            if real_path.exists() {
+                // if the keyword is a path that does exist (possibly with the extra file extensions)
+                // return the path directly, to ensure windows can find it
+                // this fixes so you dont have to type './example' and can just do 'example'
+                return vec![real_path.to_string_lossy().to_string()];
+            }
+        }
+
+        // if not keyword is a direct path to an executable
+
+        if !is_path {
+            // return variants with ".exe", ".bat" and ".cmd" extensions if keyword doesnt appear to be a path, i.e. you're probably running something by name from env PATH
+            // the reason for returning multiple variants here is that if a batch file is added to path, you'd otherwise have to type 'name.bat'
+            // but this ensures you only need 'name'.
+            path_variants
+        } else {
+            // if keyword does appear to be a path, even though it doesnt seem to exist, return the original keyword.
+            // here we dont try any other variants, since if you try running a batch file by path, that doesnt exist
+            // you get an error to command line output saying "<path> is not recognized as an internal or external command,operable program or batch file."
+            // instead of being caught when trying to create the process
+            vec![keyword.to_string()]
+        }
+    }
     fn execute_commands(&mut self, commands: Vec<Command>) -> Result<()> {
         // if command has output piped to the next, store the output here
         let mut last_piped_output: Option<Vec<u8>> = None;
@@ -522,22 +567,13 @@ impl Shoe<'_> {
 
             // if command isnt a builtin, run process
             if not_a_builtin_command {
-                // if on windows, also try running the keyword with the .bat and .cmd extensions if the regular fails
-                let keywords: Vec<String>;
+                // try multiple slight modifications of the keyword
+                // in case it failes.
+                // on windows, this includes trying the keyword with ".bat" and ".cmd" appended to the end (if keyword has no extension)
+                let keywords = self.generate_keyword_variants(&command.keyword);
+
+                // if any of the keywords succeeded
                 let mut any_worked = false;
-                if env::consts::OS == "windows" {
-                    if !command.keyword.contains(".") {
-                        keywords = vec![
-                            command.keyword.to_string(),
-                            command.keyword.to_string() + ".bat",
-                            command.keyword.to_string() + ".cmd",
-                        ]
-                    } else {
-                        keywords = vec![command.keyword.to_string()];
-                    }
-                } else {
-                    keywords = vec![command.keyword.to_string()];
-                }
 
                 for keyword in keywords {
                     let mut process = process::Command::new(&keyword);
@@ -553,9 +589,7 @@ impl Shoe<'_> {
                         process.stdout(Stdio::piped());
                     }
 
-                    // if process cant be spawned (path doesnt exist), continue
-                    // on windows this will mean testing the next path (since it tests both the path, the path + ".bat" and the path + ".cmd")
-                    // otherwise it will just move on to the next command
+                    // if process cant be spawned (path doesnt exist), test the next keyword variant
                     let Ok(mut process) = process.spawn() else {
                         continue;
                     };
