@@ -1123,12 +1123,7 @@ fn main() {
     let args = std::env::args();
     let mut use_history = true;
     let mut use_rc = true;
-    let mut first = true;
-    for arg in args {
-        if first {
-            first = false;
-            continue;
-        }
+    for arg in args.skip(1) {
         match arg.as_str() {
             "--no-history" => {
                 use_history = false;
