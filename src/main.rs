@@ -1,6 +1,6 @@
 use commands::CommandContext;
 use crossterm::{
-    cursor::{MoveDown, MoveLeft, MoveRight, MoveTo, MoveToColumn, MoveUp},
+    cursor::{MoveDown, MoveRight, MoveToColumn, MoveUp},
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     queue,
     style::{Color, SetAttribute, SetForegroundColor},
