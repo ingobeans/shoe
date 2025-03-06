@@ -865,7 +865,13 @@ impl Shoe<'_> {
             let color = match part.part_type {
                 CommandPartType::Keyword => self.theme.primary_color,
                 CommandPartType::QuotesArg => self.theme.secondary_color,
-                CommandPartType::RegularArg => Color::White,
+                CommandPartType::RegularArg => {
+                    if part.text.starts_with("-") {
+                        self.theme.secondary_color
+                    } else {
+                        Color::White
+                    }
+                }
                 CommandPartType::Special => self.theme.secondary_color,
             };
             queue!(stdout(), SetForegroundColor(color))?;
