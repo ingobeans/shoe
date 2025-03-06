@@ -719,6 +719,10 @@ impl Shoe<'_> {
                         self.cursor_pos += 1;
                     }
                 }
+                KeyCode::Esc => {
+                    self.input_text = String::new();
+                    self.cursor_pos = 0;
+                }
                 KeyCode::Tab => 'tab: {
                     reset_autocomplete_cycle = false;
                     if self.input_text.is_empty() {
