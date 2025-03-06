@@ -3,9 +3,11 @@ use crossterm::style::Color;
 pub static DEFAULT_ERR_COLOR: Color = Color::Red;
 
 pub static HELP_MESSAGE: &str = "
---help (-h)   - displays this help message
 --no-history  - dont store history in ~/.shoehistory
---no-rc       - dont run startup commands from ~/.shoerc";
+--no-rc       - dont run startup commands from ~/.shoerc
+-h            - displays this help message
+-c            - run all args passed afterwards as a command, then exit
+-k            - run all args passed afterwards as a command";
 
 pub struct Theme<'a> {
     pub name: &'a str,

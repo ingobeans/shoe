@@ -1123,23 +1123,45 @@ fn main() {
     let args = std::env::args();
     let mut use_history = true;
     let mut use_rc = true;
-    for arg in args.skip(1) {
-        match arg.as_str() {
-            "--no-history" => {
-                use_history = false;
+
+    // will be Some if the -c argument has been hit, if so, all following args are appended to this
+    let mut run_command: Option<String> = None;
+    let mut exit_after_run_command = false;
+    for mut arg in args.skip(1) {
+        // if -c has been hit, simply append this arg to run_command
+        if let Some(run_command) = &mut run_command {
+            // if arg has spaces, wrap it in quotes so its parsed correctly (yes this is sort of lazy but better than nothing)
+            if arg.contains(' ') && !arg.contains('"') {
+                arg = format!("\"{arg}\"");
             }
-            "--no-rc" => {
-                use_rc = false;
-            }
-            "-h" | "--help" => {
-                println!("{}", utils::HELP_MESSAGE);
-                return;
-            }
-            _ => {
-                queue!(stdout(), SetForegroundColor(utils::DEFAULT_ERR_COLOR)).unwrap();
-                println!("unknown arg: '{}'. do -h for help", arg);
-                queue!(stdout(), SetForegroundColor(Color::Reset)).unwrap();
-                return;
+            // append
+            *run_command += &(arg + " ");
+        } else {
+            match arg.as_str() {
+                "--no-history" => {
+                    use_history = false;
+                }
+                "--no-rc" => {
+                    use_rc = false;
+                }
+                "-h" | "--help" => {
+                    println!("{}", utils::HELP_MESSAGE);
+                    return;
+                }
+                "-c" | "--command" => {
+                    run_command = Some(String::new());
+                    exit_after_run_command = true;
+                }
+                // i didnt know what the 'k' stood for
+                "-k" | "--command-but-like-dont-exit-after" => {
+                    run_command = Some(String::new());
+                }
+                _ => {
+                    queue!(stdout(), SetForegroundColor(utils::DEFAULT_ERR_COLOR)).unwrap();
+                    println!("unknown arg: '{}'. do -h for help", arg);
+                    queue!(stdout(), SetForegroundColor(Color::Reset)).unwrap();
+                    return;
+                }
             }
         }
     }
@@ -1154,7 +1176,7 @@ fn main() {
         None
     };
 
-    let rc: Vec<String> = if use_rc {
+    let mut rc: Vec<String> = if use_rc {
         let rc_path = shellexpand::tilde("~/.shoerc").to_string();
         if std::fs::metadata(&rc_path).is_err() {
             std::fs::write(&rc_path, "").expect("Couldn't create ~/.shoerc");
@@ -1168,6 +1190,17 @@ fn main() {
         Vec::new()
     };
 
+    // if a command has been specified through -c or -k argument, add that to end of rc
+    if let Some(run_command) = run_command {
+        rc.push(run_command);
+    }
+
+    // construct shoe instance
     let mut shoe = Shoe::new(path, rc).unwrap();
+
+    // if argument was -c, dont continue running shell
+    if exit_after_run_command {
+        return;
+    }
     shoe.start().unwrap();
 }
