@@ -1062,6 +1062,9 @@ impl Shoe<'_> {
         print!("[v{}]\n\n", env!("CARGO_PKG_VERSION"));
         stdout().flush().unwrap();
 
+        // disable ctrl+c
+        ctrlc::set_handler(|| {}).unwrap();
+
         // run
         self.running = true;
         while self.running {
