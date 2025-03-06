@@ -1,6 +1,6 @@
 use commands::CommandContext;
 use crossterm::{
-    cursor::{MoveLeft, MoveRight},
+    cursor::{MoveDown, MoveLeft, MoveRight, MoveTo, MoveToColumn, MoveUp},
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     queue,
     style::{Color, SetAttribute, SetForegroundColor},
@@ -113,6 +113,27 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
     }
     // return parts
     parts
+}
+fn move_cursor_to_cursor_pos(original_x: usize, pos: usize) -> Result<()> {
+    let (width, _) = crossterm::terminal::size()?;
+    let new_x = (original_x + pos) as u16 % width;
+    let rows = (original_x + pos) as u16 / width;
+    if rows > 0 {
+        queue!(stdout(), MoveDown(rows))?;
+    }
+
+    queue!(stdout(), MoveToColumn(new_x))?;
+    Ok(())
+}
+
+fn move_back_to(original_x: usize, steps: usize) -> Result<()> {
+    let (width, _) = crossterm::terminal::size()?;
+    let rows = (original_x + steps) as u16 / width;
+    if rows > 0 {
+        queue!(stdout(), MoveUp(rows))?;
+    }
+    queue!(stdout(), MoveToColumn(original_x as u16))?;
+    Ok(())
 }
 
 fn write_file<P, C>(path: P, contents: C, append: bool) -> std::io::Result<()>
@@ -851,7 +872,7 @@ impl Shoe<'_> {
         Ok(())
     }
     fn update(&self) -> Result<()> {
-        queue!(stdout(), Clear(ClearType::UntilNewLine))?;
+        queue!(stdout(), Clear(ClearType::FromCursorDown))?;
 
         self.print_text()?;
         let mut cursor_steps = self.input_text.chars().count();
@@ -881,19 +902,18 @@ impl Shoe<'_> {
         }
         queue!(stdout(), SetForegroundColor(Color::Reset))?;
 
-        if !self.input_text.is_empty() {
-            queue!(stdout(), MoveLeft(cursor_steps as u16))?;
-        }
+        // move back cursor to the beginning of the prompt
+        let start_x = self.cwd_to_str()?.chars().count() + 4;
+        move_back_to(start_x, cursor_steps)?;
 
-        if self.cursor_pos != 0 {
-            queue!(stdout(), MoveRight(self.cursor_pos as u16))?;
-        }
+        // show cursor at the cursor_pos, then move back to the beginning of the prompt
+        move_cursor_to_cursor_pos(start_x, self.cursor_pos)?;
 
+        // render updates
         stdout().flush()?;
 
-        if self.cursor_pos != 0 {
-            queue!(stdout(), MoveLeft(self.cursor_pos as u16))?;
-        }
+        // restore cursor pos once more
+        move_back_to(start_x, self.cursor_pos)?;
 
         Ok(())
     }
