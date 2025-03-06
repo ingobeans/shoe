@@ -1133,14 +1133,9 @@ fn main() {
     // will be Some if the -c or -k argument has been hit, if so, all following args are appended to this
     let mut run_command: Option<String> = None;
     let mut exit_after_run_command = false;
-    for mut arg in args.skip(1) {
+    for arg in args.skip(1) {
         // if -c or -k has been hit, simply append this arg to run_command
         if let Some(run_command) = &mut run_command {
-            // if arg has spaces, wrap it in quotes so its parsed correctly (yes this is sort of lazy but better than nothing)
-            if arg.contains(' ') && !arg.contains('"') {
-                arg = format!("\"{arg}\"");
-            }
-            // append
             *run_command += &(arg + " ");
         } else {
             match arg.as_str() {
