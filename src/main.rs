@@ -114,23 +114,21 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
     // return parts
     parts
 }
-fn move_cursor_to_cursor_pos(original_x: usize, pos: usize) -> Result<()> {
-    let (width, _) = crossterm::terminal::size()?;
-    let new_x = (original_x + pos) as u16 % width;
-    let rows = (original_x + pos) as u16 / width;
+fn move_cursor_to_cursor_pos(original_x: usize, pos: usize, width: usize) -> Result<()> {
+    let new_x = (original_x + pos) % width;
+    let rows = (original_x + pos) / width;
     if rows > 0 {
-        queue!(stdout(), MoveDown(rows))?;
+        queue!(stdout(), MoveDown(rows as u16))?;
     }
 
-    queue!(stdout(), MoveToColumn(new_x))?;
+    queue!(stdout(), MoveToColumn(new_x as u16))?;
     Ok(())
 }
 
-fn move_back_to(original_x: usize, steps: usize) -> Result<()> {
-    let (width, _) = crossterm::terminal::size()?;
-    let rows = (original_x + steps) as u16 / width;
+fn move_back_to(original_x: usize, steps: usize, width: usize) -> Result<()> {
+    let rows = (original_x + steps) / width;
     if rows > 0 {
-        queue!(stdout(), MoveUp(rows))?;
+        queue!(stdout(), MoveUp(rows as u16))?;
     }
     queue!(stdout(), MoveToColumn(original_x as u16))?;
     Ok(())
@@ -905,19 +903,25 @@ impl Shoe<'_> {
             }
         }
         queue!(stdout(), SetForegroundColor(Color::Reset))?;
+        let (width, _) = crossterm::terminal::size()?;
+        let start_x = self.cwd_to_str()?.chars().count() + 4;
+        let width = width as usize;
+        if cursor_steps + start_x == width {
+            print!(" ");
+            cursor_steps += 1;
+        }
 
         // move back cursor to the beginning of the prompt
-        let start_x = self.cwd_to_str()?.chars().count() + 4;
-        move_back_to(start_x, cursor_steps)?;
+        move_back_to(start_x, cursor_steps, width)?;
 
         // show cursor at the cursor_pos, then move back to the beginning of the prompt
-        move_cursor_to_cursor_pos(start_x, self.cursor_pos)?;
+        move_cursor_to_cursor_pos(start_x, self.cursor_pos, width)?;
 
         // render updates
         stdout().flush()?;
 
         // restore cursor pos once more
-        move_back_to(start_x, self.cursor_pos)?;
+        move_back_to(start_x, self.cursor_pos, width)?;
 
         Ok(())
     }
