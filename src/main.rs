@@ -471,7 +471,7 @@ impl Shoe<'_> {
             // check if a file with keyword as path exists relative to cwd
             let variant_as_pathbuf = RelativePathBuf::from(&variant);
             let real_path = variant_as_pathbuf.to_logical_path(&self.cwd);
-            if real_path.exists() {
+            if real_path.is_file() {
                 // if the keyword is a path that does exist (possibly with the extra file extensions)
                 // return the path directly, to ensure windows can find it
                 // this fixes so you dont have to type './example' and can just do 'example'
