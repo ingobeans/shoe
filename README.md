@@ -10,6 +10,10 @@ i'm adding the features i find necessary, and trying to make it look pretty!
 
 i also ensured all builtin commands are simple but powerful. an example: to copy a file to a new path, thats `cp source dest`, and to copy an entire directory recursively to a new path, thats also `cp source dest`. you dont need any special flags to seperate the two cases, the copy command will copy what you tell it to.
 
+## install
+
+`cargo install --git https://github.com/ingobeans/shoe.git`
+
 ## features
 
 - running commmands! (both builtin and executables)
