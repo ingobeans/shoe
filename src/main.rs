@@ -372,7 +372,6 @@ struct Shoe<'a> {
     running: bool,
     listening: bool,
     use_suggestions: bool,
-    cwd: PathBuf,
     input_text: String,
     cursor_pos: usize,
     autocomplete_cycle_index: Option<usize>,
@@ -400,8 +399,6 @@ impl Shoe<'_> {
         }
         let history_index = history.len();
 
-        let cwd = std::env::current_dir()?;
-
         let mut instance = Shoe {
             history_path,
             history,
@@ -410,7 +407,6 @@ impl Shoe<'_> {
             running: false,
             listening: false,
             use_suggestions: true,
-            cwd,
             input_text: String::new(),
             cursor_pos: 0,
             last_input_before_autocomplete: None,
@@ -425,8 +421,7 @@ impl Shoe<'_> {
     }
     /// Convert cwd to a string, also replacing home path with ~
     fn cwd_to_str(&self) -> Result<String> {
-        let path = self
-            .cwd
+        let path = std::env::current_dir()?
             .to_str()
             .ok_or(std::io::Error::other("Couldn't read path as string"))?
             .to_string();
@@ -438,10 +433,6 @@ impl Shoe<'_> {
         } else {
             Ok(path.replace(&home_path, "~"))
         }
-    }
-    fn update_cwd(&mut self) -> Result<()> {
-        self.cwd = std::env::current_dir()?;
-        Ok(())
     }
     fn generate_keyword_variants(&self, keyword: &String) -> Vec<String> {
         // necessary function to ensure you can run files from their path or name if they're in the env PATH variable
@@ -461,15 +452,18 @@ impl Shoe<'_> {
             path_variants.push(keyword.to_string() + ".cmd");
         }
 
-        for variant in &path_variants {
-            // check if a file with keyword as path exists relative to cwd
-            let variant_as_pathbuf = RelativePathBuf::from(&variant);
-            let real_path = variant_as_pathbuf.to_logical_path(&self.cwd);
-            if real_path.is_file() {
-                // if the keyword is a path that does exist (possibly with the extra file extensions)
-                // return the path directly, to ensure windows can find it
-                // this fixes so you dont have to type './example' and can just do 'example'
-                return vec![real_path.to_string_lossy().to_string()];
+        let cwd = std::env::current_dir();
+        if let Ok(cwd) = cwd {
+            for variant in &path_variants {
+                // check if a file with keyword as path exists relative to cwd
+                let variant_as_pathbuf = RelativePathBuf::from(&variant);
+                let real_path = variant_as_pathbuf.to_logical_path(&cwd);
+                if real_path.is_file() {
+                    // if the keyword is a path that does exist (possibly with the extra file extensions)
+                    // return the path directly, to ensure windows can find it
+                    // this fixes so you dont have to type './example' and can just do 'example'
+                    return vec![real_path.to_string_lossy().to_string()];
+                }
             }
         }
 
@@ -556,7 +550,6 @@ impl Shoe<'_> {
                             self.running = false;
                             return Ok(());
                         }
-                        commands::CommandResult::UpdateCwd => self.update_cwd()?,
                         commands::CommandResult::UpdateTheme(new_index) => {
                             self.theme = &THEMES[new_index];
                         }

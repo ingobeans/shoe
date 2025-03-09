@@ -55,7 +55,7 @@ fn cd(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
         }
         std::env::set_current_dir(path)?;
     }
-    Ok(CommandResult::UpdateCwd)
+    Ok(CommandResult::Lovely)
 }
 
 fn pwd(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
@@ -231,7 +231,6 @@ pub struct CommandContext<'a> {
 pub enum CommandResult {
     Lovely,
     Exit,
-    UpdateCwd,
     UpdateTheme(usize),
     NotACommand,
 }
