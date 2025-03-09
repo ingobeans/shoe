@@ -375,7 +375,6 @@ struct Shoe<'a> {
     cwd: PathBuf,
     input_text: String,
     cursor_pos: usize,
-    current_dir_contents: Vec<String>,
     autocomplete_cycle_index: Option<usize>,
     last_input_before_autocomplete: Option<String>,
 }
@@ -402,7 +401,6 @@ impl Shoe<'_> {
         let history_index = history.len();
 
         let cwd = std::env::current_dir()?;
-        let current_dir_contents = list_dir(&cwd)?.into_iter().map(|f| f.1).collect();
 
         let mut instance = Shoe {
             history_path,
@@ -415,7 +413,6 @@ impl Shoe<'_> {
             cwd,
             input_text: String::new(),
             cursor_pos: 0,
-            current_dir_contents,
             last_input_before_autocomplete: None,
             autocomplete_cycle_index: None,
         };
@@ -444,7 +441,6 @@ impl Shoe<'_> {
     }
     fn update_cwd(&mut self) -> Result<()> {
         self.cwd = std::env::current_dir()?;
-        self.current_dir_contents = list_dir(&self.cwd)?.into_iter().map(|f| f.1).collect();
         Ok(())
     }
     fn generate_keyword_variants(&self, keyword: &String) -> Vec<String> {
