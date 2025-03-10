@@ -4,7 +4,7 @@ use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     queue,
     style::{Color, SetAttribute, SetForegroundColor},
-    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
+    terminal::{disable_raw_mode, enable_raw_mode, is_raw_mode_enabled, Clear, ClearType},
 };
 use relative_path::RelativePathBuf;
 use std::{
@@ -1083,13 +1083,16 @@ impl Shoe<'_> {
         // run
         self.running = true;
         while self.running {
+            if !is_raw_mode_enabled()? {
+                enable_raw_mode()?;
+            }
             let command = &self.listen()?;
+            disable_raw_mode()?;
             self.execute_command(command, true)?;
         }
         Ok(())
     }
     fn listen(&mut self) -> Result<String> {
-        enable_raw_mode()?;
         self.listening = true;
 
         queue!(stdout(), SetForegroundColor(self.theme.primary_color))?;
@@ -1106,9 +1109,9 @@ impl Shoe<'_> {
         if self.input_text.chars().count() != 0 {
             queue!(stdout(), MoveRight(self.input_text.chars().count() as u16))?;
         }
+        stdout().lock().write_all(b"\n")?;
         queue!(stdout(), MoveToColumn(0))?;
-        println!();
-        disable_raw_mode()?;
+        stdout().flush()?;
         let text = self.input_text.clone();
         self.input_text = String::new();
         self.cursor_pos = 0;
