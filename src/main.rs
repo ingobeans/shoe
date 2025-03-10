@@ -1106,6 +1106,7 @@ impl Shoe<'_> {
         if self.input_text.chars().count() != 0 {
             queue!(stdout(), MoveRight(self.input_text.chars().count() as u16))?;
         }
+        queue!(stdout(), MoveToColumn(0))?;
         println!();
         disable_raw_mode()?;
         let text = self.input_text.clone();
