@@ -399,7 +399,6 @@ impl Shoe<'_> {
             history = Vec::new();
         }
         let history_index = history.len();
-        let is_windows = env::consts::OS == "windows";
 
         Shoe {
             history_path,
@@ -409,7 +408,7 @@ impl Shoe<'_> {
             running: false,
             listening: false,
             use_suggestions: true,
-            substitute_tildes: is_windows,
+            substitute_tildes: true,
             input_text: String::new(),
             cursor_pos: 0,
             last_input_before_autocomplete: None,
