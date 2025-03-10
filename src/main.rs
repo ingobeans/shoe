@@ -380,7 +380,7 @@ struct Shoe<'a> {
 }
 
 impl Shoe<'_> {
-    fn new(history_path: Option<String>, rc: Vec<String>) -> Result<Self> {
+    fn new(history_path: Option<String>) -> Self {
         let history: Vec<String>;
         if let Some(history_path) = &history_path {
             let history_text =
@@ -401,7 +401,7 @@ impl Shoe<'_> {
         let history_index = history.len();
         let is_windows = env::consts::OS == "windows";
 
-        let mut instance = Shoe {
+        Shoe {
             history_path,
             history,
             history_index,
@@ -414,13 +414,7 @@ impl Shoe<'_> {
             cursor_pos: 0,
             last_input_before_autocomplete: None,
             autocomplete_cycle_index: None,
-        };
-
-        for command in rc {
-            instance.execute_command(&command, false)?;
         }
-
-        Ok(instance)
     }
     /// Convert cwd to a string, also replacing home path with ~
     fn cwd_to_str(&self) -> Result<String> {
@@ -1069,16 +1063,22 @@ impl Shoe<'_> {
         queue!(stdout(), SetForegroundColor(Color::Reset))?;
         Ok(())
     }
-    fn start(&mut self) -> Result<()> {
+    fn start(&mut self, rc: Vec<String>) -> Result<()> {
         // print banner
-        queue!(stdout(), SetForegroundColor(self.theme.primary_color)).unwrap();
+        queue!(stdout(), SetForegroundColor(Color::DarkGrey)).unwrap();
         print!("shoe ");
         queue!(stdout(), SetForegroundColor(Color::White)).unwrap();
         print!("[v{}]\n\n", env!("CARGO_PKG_VERSION"));
-        stdout().flush().unwrap();
 
         // disable ctrl+c
         ctrlc::set_handler(|| {}).unwrap();
+
+        // execute rc commands
+        for command in rc {
+            self.execute_command(&command, false)?;
+        }
+
+        stdout().flush().unwrap();
 
         // run
         self.running = true;
@@ -1199,11 +1199,13 @@ fn main() {
     }
 
     // construct shoe instance
-    let mut shoe = Shoe::new(path, rc).unwrap();
+    let mut shoe = Shoe::new(path);
 
     // if argument was -c, dont continue running shell
     if exit_after_run_command {
         return;
     }
-    shoe.start().unwrap();
+
+    // run, and pass rc commands
+    shoe.start(rc).unwrap();
 }
