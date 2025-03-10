@@ -372,6 +372,7 @@ struct Shoe<'a> {
     running: bool,
     listening: bool,
     use_suggestions: bool,
+    substitute_tildes: bool,
     input_text: String,
     cursor_pos: usize,
     autocomplete_cycle_index: Option<usize>,
@@ -398,6 +399,7 @@ impl Shoe<'_> {
             history = Vec::new();
         }
         let history_index = history.len();
+        let is_windows = env::consts::OS == "windows";
 
         let mut instance = Shoe {
             history_path,
@@ -407,6 +409,7 @@ impl Shoe<'_> {
             running: false,
             listening: false,
             use_suggestions: true,
+            substitute_tildes: is_windows,
             input_text: String::new(),
             cursor_pos: 0,
             last_input_before_autocomplete: None,
@@ -1028,7 +1031,16 @@ impl Shoe<'_> {
 
         self.history_index = self.history.len();
 
-        let parts = remove_empty_parts(parse_parts(command, false));
+        let mut parts = remove_empty_parts(parse_parts(command, false));
+
+        if self.substitute_tildes {
+            for part in parts.iter_mut() {
+                if part.text.contains('~') {
+                    let new = shellexpand::tilde(&part.text).to_string();
+                    part.text = new;
+                }
+            }
+        }
 
         // store any errors that arise here
         let mut err: Option<std::io::Error> = None;
