@@ -14,7 +14,13 @@ use crossterm::{
 use crate::utils::{Theme, THEMES};
 
 fn ls(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
-    let items = fs::read_dir(context.args.front().unwrap_or(&"."))?;
+    let path = context.args.front().unwrap_or(&".");
+    if let Ok(metadata) = fs::metadata(&path) {
+        if metadata.is_file() {
+            Err(std::io::Error::other("Path is a file"))?
+        }
+    }
+    let items = fs::read_dir(path)?;
 
     let mut dirs = vec![];
     let mut files = vec![];
