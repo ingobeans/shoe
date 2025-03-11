@@ -48,7 +48,6 @@ fn ls(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
 fn cd(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
     let path = context.args.front();
     if let Some(path) = path {
-        let path = shellexpand::tilde(path).to_string();
         let metadata = fs::metadata(&path)?;
         if metadata.is_file() {
             Err(std::io::Error::other("Path is a file"))?
