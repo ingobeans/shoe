@@ -25,16 +25,11 @@ fn ls(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
     let mut dirs = vec![];
     let mut files = vec![];
     for item in items.flatten() {
-        let name = item.file_name().into_string();
-        match name {
-            Ok(name) => {
-                if item.file_type()?.is_file() {
-                    files.push(name);
-                } else {
-                    dirs.push(name)
-                }
-            }
-            Err(_) => Err(std::io::Error::other("Path name couldn't be read"))?,
+        let name = item.file_name().to_string_lossy().to_string();
+        if item.file_type()?.is_file() {
+            files.push(name);
+        } else {
+            dirs.push(name)
         }
     }
     queue!(
