@@ -4,7 +4,7 @@
 
 shoe: a shell!
 
-i made this as a basic replacement to the built-in shells in windows, as cmd can be really dumb and powershell can be really frustrating (and slow as hell on old machines).
+i made this as a basic replacement to the built-in shells in windows, as cmd can be really dumb and powershell can be really frustrating (and slow as hell on old machines). though it is cross platform if you want to use it for some other reason.
 
 i'm adding the features i find necessary, and trying to make it look pretty!
 
