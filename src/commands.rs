@@ -28,7 +28,7 @@ fn match_pattern(entries: &[String], pattern: &str) -> Vec<String> {
                 return vec![item.to_string()];
             }
         }
-        return Vec::new();
+        Vec::new()
     }
 }
 
@@ -64,7 +64,7 @@ fn match_file_pattern(pattern: &str) -> Result<(Vec<String>, PathBuf), std::io::
 
 fn ls(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
     let path = context.args.front().unwrap_or(&".");
-    if let Ok(metadata) = fs::metadata(&path) {
+    if let Ok(metadata) = fs::metadata(path) {
         if metadata.is_file() {
             Err(std::io::Error::other("Path is a file"))?
         }
@@ -98,7 +98,7 @@ fn ls(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
 fn cd(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
     let path = context.args.front();
     if let Some(path) = path {
-        let metadata = fs::metadata(&path)?;
+        let metadata = fs::metadata(path)?;
         if metadata.is_file() {
             Err(std::io::Error::other("Path is a file"))?
         }
