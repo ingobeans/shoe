@@ -22,6 +22,7 @@ i also ensured all builtin commands are simple but powerful. an example: to copy
 - persistent command history (stored at ~/.shoehistory)
 - show inline suggestions (from history) which can be completed by pressing right arrow at the end of the line (like in powershell)
 - rc file (at ~/.shoerc)
+- pattern matching for files, ex. `mv things/*.txt text_files/`
 
 ## special characters
 
