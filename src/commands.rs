@@ -13,6 +13,55 @@ use crossterm::{
 
 use crate::utils::{Theme, THEMES};
 
+fn match_pattern(entries: &[String], pattern: &str) -> Vec<String> {
+    if let Some(split) = pattern.split_once("*") {
+        let (startswith, endswith) = split;
+        let g = entries
+            .iter()
+            .filter(|f| f.starts_with(startswith) && f.ends_with(endswith))
+            .map(|f| f.to_string())
+            .collect();
+        g
+    } else {
+        for item in entries {
+            if *item == pattern {
+                return vec![item.to_string()];
+            }
+        }
+        return Vec::new();
+    }
+}
+
+fn match_file_pattern(pattern: &str) -> Result<(Vec<String>, PathBuf), std::io::Error> {
+    let source = pattern;
+    let source_pathbuf: PathBuf = source.into();
+
+    let source_filename = match source_pathbuf.file_name() {
+        Some(name) => name.to_string_lossy().to_string(),
+        None => "".to_string(),
+    };
+
+    let source_parent = match source_pathbuf.parent() {
+        Some(path) => path.to_path_buf(),
+        None => PathBuf::from(""),
+    };
+
+    let mut source_parent_string = source_parent.to_string_lossy().to_string();
+    // if parent is "", replace with ".", so std::fs::read_dir works right
+    if source_parent_string.is_empty() {
+        source_parent_string = ".".to_string();
+    }
+
+    // get contents of source dir (for pattern matching)
+    let source_dir_contents: Vec<String> = std::fs::read_dir(source_parent_string)?
+        .flatten()
+        .map(|f| f.file_name().to_string_lossy().to_string())
+        .collect();
+
+    let matches = match_pattern(&source_dir_contents, &source_filename);
+    Ok((matches, source_parent))
+}
+
 fn ls(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
     let path = context.args.front().unwrap_or(&".");
     if let Ok(metadata) = fs::metadata(&path) {
@@ -109,29 +158,41 @@ fn cp(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
     if context.args.len() != 2 {
         Err(std::io::Error::other("Usage: 'cp <source> <dest>'"))?;
     }
-    let source = context.args[0];
-    let mut dest_pathbuf: PathBuf = context.args[1].into();
+    let dest_pathbuf = PathBuf::from(context.args[1]);
+    let (matches, source_parent) = match_file_pattern(context.args[0])?;
+    let more_than_1_match = matches.len() > 1;
 
-    let source_is_file = fs::metadata(source)?.is_file();
-
-    // is destination the path to an existing directory?
-    let dest_is_existing_directory = if let Ok(metadata) = fs::metadata(&dest_pathbuf) {
-        metadata.is_dir()
-    } else {
-        false
-    };
-
-    // if source is a file, and destination is a directory (without filename), append the source filename to the destination path
-    if source_is_file && dest_is_existing_directory {
-        let source_pathbuf: PathBuf = source.into();
-        dest_pathbuf.push(source_pathbuf.file_name().unwrap());
+    // if more than 1 match, validate that the output dest is a directory, and not direct file path
+    if more_than_1_match && !dest_pathbuf.is_dir() {
+        Err(std::io::Error::other(
+            "Can't copy the files. Either destination directory doesn't exist, or source pattern matches multiple items, but destination is a single file.",
+        ))?;
+    }
+    // if no matches, raise error
+    if matches.is_empty() {
+        Err(std::io::Error::other("Source item(s) not found."))?;
     }
 
-    if source_is_file {
-        std::fs::copy(source, dest_pathbuf)?;
-    } else {
-        copy_dir(source, dest_pathbuf)?;
+    for name in matches {
+        let mut dest_pathbuf = dest_pathbuf.clone();
+        let source = source_parent.join(&name);
+
+        let source_is_file = source.is_file();
+
+        // if source is a file, and destination is a directory (without filename), append the source filename to the destination path
+        if more_than_1_match || (source_is_file && dest_pathbuf.is_dir()) {
+            dest_pathbuf.push(&name);
+        }
+
+        println!("{:?} -> {:?}", source, dest_pathbuf);
+
+        if source_is_file {
+            std::fs::copy(&source, dest_pathbuf)?;
+        } else {
+            copy_dir(&source, dest_pathbuf)?;
+        }
     }
+
     Ok(CommandResult::Lovely)
 }
 fn mv(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
@@ -139,12 +200,14 @@ fn mv(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
         Err(std::io::Error::other("Usage: 'mv <source> <dest>'"))?;
     }
     cp(context)?;
-    let source = context.args[0];
-    let source_is_file = fs::metadata(source)?.is_file();
-    if source_is_file {
-        std::fs::remove_file(source)?;
-    } else {
-        std::fs::remove_dir_all(source)?;
+    let (matches, source_parent) = match_file_pattern(context.args[0])?;
+    for name in matches {
+        let pathbuf = source_parent.join(name);
+        if pathbuf.is_file() {
+            std::fs::remove_file(pathbuf)?;
+        } else {
+            std::fs::remove_dir_all(pathbuf)?;
+        }
     }
     Ok(CommandResult::Lovely)
 }
@@ -152,12 +215,15 @@ fn rm(context: &mut CommandContext) -> Result<CommandResult, std::io::Error> {
     if context.args.len() != 1 {
         Err(std::io::Error::other("Usage: 'rm <target>'"))?;
     }
-    let target = context.args[0];
-    let target_is_file = fs::metadata(target)?.is_file();
-    if target_is_file {
-        std::fs::remove_file(target)?;
-    } else {
-        std::fs::remove_dir_all(target)?;
+    let (matches, source_parent) = match_file_pattern(context.args[0])?;
+    for name in matches {
+        let pathbuf = source_parent.join(name);
+        let target_is_file = pathbuf.is_file();
+        if target_is_file {
+            std::fs::remove_file(pathbuf)?;
+        } else {
+            std::fs::remove_dir_all(pathbuf)?;
+        }
     }
     Ok(CommandResult::Lovely)
 }

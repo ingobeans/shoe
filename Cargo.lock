@@ -274,7 +274,7 @@ dependencies = [
 
 [[package]]
 name = "shoe"
-version = "0.7.45"
+version = "0.7.46"
 dependencies = [
  "crossterm",
  "ctrlc",
