@@ -134,6 +134,14 @@ fn move_back_to(original_x: usize, steps: usize, width: usize) -> Result<()> {
     Ok(())
 }
 
+fn get_script_runtime(script_extension: &str) -> Option<&str> {
+    Some(match script_extension {
+        "py" => "python",
+        "js" => "node",
+        _ => return None,
+    })
+}
+
 fn write_file<P, C>(path: P, contents: C, append: bool) -> std::io::Result<()>
 where
     P: AsRef<Path>,
@@ -342,6 +350,7 @@ enum CommandInputModifier {
     /// Command input has no modifier.
     Default,
 }
+#[derive(Clone)]
 enum CommandOutputModifier {
     /// Command output has been piped.
     Piped,
@@ -485,7 +494,8 @@ impl Shoe<'_> {
         let mut last_success: Option<bool> = None;
 
         // run each command sequentially
-        for command in &commands {
+        for mut command in commands {
+            let output_modifier = command.output_modifier.clone();
             queue!(stdout(), SetForegroundColor(Color::Reset))?;
             // check commands run condition
             // ex. for when doing `echo "do something which may fail" && echo it succeeded!`
@@ -551,7 +561,7 @@ impl Shoe<'_> {
                             self.theme = &THEMES[new_index];
                         }
                         commands::CommandResult::Lovely => {
-                            if let CommandOutputModifier::Default = command.output_modifier {
+                            if let CommandOutputModifier::Default = output_modifier {
                                 // write output
                                 stdout().lock().write_all(&output_buf)?;
                             }
@@ -572,10 +582,21 @@ impl Shoe<'_> {
 
             // if command isnt a builtin, run process
             if not_a_builtin_command {
+                let mut keyword = command.keyword;
+
+                // check if it is a script file, if so, try running with appropriate runtime
+                let old = keyword.clone();
+                if let Some((_, extension)) = keyword.rsplit_once(".") {
+                    if let Some(runtime) = get_script_runtime(extension) {
+                        command.args.push_front(&old);
+                        keyword = runtime.to_string();
+                    }
+                }
+
                 // try multiple slight modifications of the keyword
                 // in case it failes.
                 // on windows, this includes trying the keyword with ".bat" and ".cmd" appended to the end (if keyword has no extension)
-                let keywords = self.generate_keyword_variants(&command.keyword);
+                let keywords = self.generate_keyword_variants(&keyword);
 
                 // if any of the keywords succeeded
                 let mut any_worked = false;
@@ -629,12 +650,12 @@ impl Shoe<'_> {
                 if !any_worked {
                     last_success = Some(false);
                     queue!(stdout(), SetForegroundColor(self.theme.err_color)).unwrap();
-                    println!("file/command '{}' not found! :(", command.keyword);
+                    println!("file/command '{}' not found! :(", keyword);
                 }
             }
 
             // handle command output
-            match &command.output_modifier {
+            match &output_modifier {
                 CommandOutputModifier::Piped => {
                     last_piped_output = stdout_data;
                 }
