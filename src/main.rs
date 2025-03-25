@@ -1002,7 +1002,7 @@ impl Shoe<'_> {
         }
         Ok(commands)
     }
-    fn execute_command(&mut self, command: &String, allow_add_to_history: bool) -> Result<()> {
+    fn execute_command_string(&mut self, command: &String, allow_history: bool) -> Result<()> {
         if command.trim().is_empty() {
             self.history_index = self.history.len();
             return Ok(());
@@ -1013,7 +1013,7 @@ impl Shoe<'_> {
                 should_store_history = false;
             }
         }
-        should_store_history &= allow_add_to_history;
+        should_store_history &= allow_history;
 
         if should_store_history {
             self.history.push(command.clone());
@@ -1075,7 +1075,7 @@ impl Shoe<'_> {
 
         // execute rc commands
         for command in rc {
-            self.execute_command(&command, false)?;
+            self.execute_command_string(&command, false)?;
         }
 
         stdout().flush().unwrap();
@@ -1088,7 +1088,7 @@ impl Shoe<'_> {
             }
             let command = &self.listen()?;
             disable_raw_mode()?;
-            self.execute_command(command, true)?;
+            self.execute_command_string(command, true)?;
         }
         Ok(())
     }
