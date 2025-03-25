@@ -533,6 +533,7 @@ impl Shoe<'_> {
                 args: &command.args,
                 theme: self.theme,
                 stdout: &mut output_buf,
+                stdin: stdin_data.clone().unwrap_or(Vec::new()),
             };
             let result = commands::execute_command(&command.keyword, &mut context);
             let mut not_a_builtin_command = false;

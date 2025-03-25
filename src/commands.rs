@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use copypasta::ClipboardProvider;
 use crossterm::{
     cursor, execute, queue,
     style::{Color, SetForegroundColor},
@@ -94,7 +95,6 @@ fn ls(context: &mut CommandContext) -> Result<CommandResult> {
     }
     Ok(CommandResult::Lovely)
 }
-
 fn cd(context: &mut CommandContext) -> Result<CommandResult> {
     let path = context.args.front();
     if let Some(path) = path {
@@ -106,7 +106,6 @@ fn cd(context: &mut CommandContext) -> Result<CommandResult> {
     }
     Ok(CommandResult::Lovely)
 }
-
 fn pwd(context: &mut CommandContext) -> Result<CommandResult> {
     writeln!(
         context.stdout,
@@ -117,8 +116,41 @@ fn pwd(context: &mut CommandContext) -> Result<CommandResult> {
     )?;
     Ok(CommandResult::Lovely)
 }
+fn copy(context: &mut CommandContext) -> Result<CommandResult> {
+    // dont trim if -n or --no-trim flags
+    // by default trimming is enabled, so that `echo hello | copy` copies "hello" and not "hello\n"
+    let trim_end = !(context.args.contains(&"-n") || context.args.contains(&"--no-trim"));
+
+    // to avoid panic
+    if context.stdin.is_empty() {
+        return Ok(CommandResult::Lovely);
+    }
+
+    // try decoding stdin as utf_8
+    match std::str::from_utf8(&context.stdin) {
+        Ok(mut text) => {
+            if trim_end {
+                text = text.trim_end_matches('\n');
+            }
+            // create a clipboard context
+            let Ok(mut ctx) = copypasta::ClipboardContext::new() else {
+                return Err(std::io::Error::other("Couldn't access clipboard"));
+            };
+            // write to clipboard context and handle error if it arises
+            if let Err(_) = ctx.set_contents(text.to_string()) {
+                return Err(std::io::Error::other("Couldn't write to clipboard"));
+            }
+            Ok(CommandResult::Lovely)
+        }
+        Err(_) => Err(std::io::Error::other("Stdin was not UTF-8 text")),
+    }
+}
 fn echo(context: &mut CommandContext) -> Result<CommandResult> {
     queue!(context.stdout, SetForegroundColor(Color::Reset))?;
+    if !context.stdin.is_empty() {
+        context.stdout.append(&mut context.stdin);
+        return Ok(CommandResult::Lovely);
+    }
     for line in context.args {
         writeln!(context.stdout, "{}", line)?;
     }
@@ -280,6 +312,7 @@ pub fn execute_command(keyword: &str, context: &mut CommandContext) -> Result<Co
         "help" => help(context),
         "mkdir" => mkdir(context),
         "theme" => theme(context),
+        "copy" => copy(context),
         "exit" => Ok(CommandResult::Exit),
         _ => Ok(CommandResult::NotACommand),
     }
@@ -289,6 +322,7 @@ pub struct CommandContext<'a> {
     pub args: &'a VecDeque<&'a str>,
     pub theme: &'a Theme<'a>,
     pub stdout: &'a mut Vec<u8>,
+    pub stdin: Vec<u8>,
 }
 
 pub enum CommandResult {
