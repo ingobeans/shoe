@@ -293,7 +293,7 @@ fn theme(context: &mut CommandContext) -> Result<CommandResult> {
                 return Ok(CommandResult::UpdateTheme(index));
             }
         }
-        let message = format!("no theme by name '{}'", theme_name);
+        let message = format!("No theme by name '{}'", theme_name);
         Err(std::io::Error::other(message))
     }
 }
