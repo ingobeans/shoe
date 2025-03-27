@@ -250,6 +250,28 @@ enum AbsoluteOrRelativePathBuf {
     Relative(RelativePathBuf),
     Absolute(PathBuf),
 }
+impl AbsoluteOrRelativePathBuf {
+    fn to_string(&self) -> String {
+        match self {
+            AbsoluteOrRelativePathBuf::Relative(pathbuf) => pathbuf.to_string(),
+            AbsoluteOrRelativePathBuf::Absolute(pathbuf) => {
+                let mut parts: Vec<String> = vec![];
+                for component in pathbuf.components() {
+                    match component {
+                        std::path::Component::Normal(path) => {
+                            parts.push(path.to_string_lossy().to_string());
+                        }
+                        std::path::Component::Prefix(prefix_component) => {
+                            parts.push(prefix_component.as_os_str().to_string_lossy().to_string());
+                        }
+                        _ => {}
+                    };
+                }
+                parts.join("/")
+            }
+        }
+    }
+}
 
 /// Autocomplete an input word to a relative path
 fn autocomplete(
@@ -326,22 +348,6 @@ fn autocomplete(
     }
 
     None
-}
-
-fn absolute_pathbuf_to_string(input: PathBuf) -> String {
-    let mut parts: Vec<String> = vec![];
-    for component in input.components() {
-        match component {
-            std::path::Component::Normal(path) => {
-                parts.push(path.to_string_lossy().to_string());
-            }
-            std::path::Component::Prefix(prefix_component) => {
-                parts.push(prefix_component.as_os_str().to_string_lossy().to_string());
-            }
-            _ => {}
-        };
-    }
-    parts.join("/")
 }
 
 enum CommandInputModifier {
@@ -705,15 +711,7 @@ impl Shoe<'_> {
                     let Some((autocompletion_is_dir, autocompletion)) = result else {
                         break 'tab;
                     };
-                    let mut autocompletion_string: String;
-                    match autocompletion {
-                        AbsoluteOrRelativePathBuf::Relative(relative) => {
-                            autocompletion_string = relative.to_string();
-                        }
-                        AbsoluteOrRelativePathBuf::Absolute(absolute) => {
-                            autocompletion_string = absolute_pathbuf_to_string(absolute);
-                        }
-                    }
+                    let mut autocompletion_string = autocompletion.to_string();
                     if autocompletion_is_dir {
                         autocompletion_string += "/";
                     }
