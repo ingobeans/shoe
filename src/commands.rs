@@ -13,8 +13,8 @@ use crossterm::{
 };
 
 use crate::{
+    absolute_pathbuf_to_string,
     utils::{Theme, THEMES},
-    AbsoluteOrRelativePathBuf,
 };
 
 fn match_pattern(entries: &[String], pattern: &str) -> Vec<String> {
@@ -117,10 +117,8 @@ fn cd(context: &mut CommandContext) -> Result<CommandResult> {
 }
 fn pwd(context: &mut CommandContext) -> Result<CommandResult> {
     let path = std::env::current_dir()?;
-    // convert to AbsoluteOrRelativePathBuf for the to_string() method
-    let path = AbsoluteOrRelativePathBuf::Absolute(path);
 
-    let text = path.to_string();
+    let text = absolute_pathbuf_to_string(&path);
     writeln!(context.stdout, "{}", text)?;
 
     Ok(CommandResult::Lovely)

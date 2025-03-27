@@ -254,31 +254,33 @@ impl AbsoluteOrRelativePathBuf {
     fn to_string(&self) -> String {
         match self {
             AbsoluteOrRelativePathBuf::Relative(pathbuf) => pathbuf.to_string(),
-            AbsoluteOrRelativePathBuf::Absolute(pathbuf) => {
-                let mut parts: Vec<String> = vec![];
-                for component in pathbuf.components() {
-                    match component {
-                        std::path::Component::Normal(path) => {
-                            parts.push(path.to_string_lossy().to_string());
-                        }
-                        std::path::Component::Prefix(prefix_component) => {
-                            parts.push(prefix_component.as_os_str().to_string_lossy().to_string());
-                        }
-                        _ => {}
-                    };
-                }
-                parts.join("/")
-            }
+            AbsoluteOrRelativePathBuf::Absolute(pathbuf) => absolute_pathbuf_to_string(pathbuf),
         }
     }
 }
 
-/// Autocomplete an input word to a relative path
-fn autocomplete(
-    current_word: &String,
-    mut item_index: usize,
-) -> Option<(bool, AbsoluteOrRelativePathBuf)> {
+fn absolute_pathbuf_to_string(input: &PathBuf) -> String {
+    let mut parts: Vec<String> = vec![];
+    for component in input.components() {
+        match component {
+            std::path::Component::Normal(path) => {
+                parts.push(path.to_string_lossy().to_string());
+            }
+            std::path::Component::Prefix(prefix_component) => {
+                parts.push(prefix_component.as_os_str().to_string_lossy().to_string());
+            }
+            _ => {}
+        };
+    }
+    parts.join("/")
+}
+
+/// Autocomplete an input word to a relative or absolute path
+fn autocomplete(current_word: &String, mut item_index: usize) -> Option<String> {
+    // stores all found valid entries
+    // in tuple where first element is whether the item is a directory, and the second is the path
     let mut valid: Vec<(bool, AbsoluteOrRelativePathBuf)> = Vec::new();
+
     // check if is absolute
     let path = PathBuf::from(&current_word);
     if path.is_absolute() {
@@ -340,14 +342,15 @@ fn autocomplete(
     }
     if !valid.is_empty() {
         item_index %= valid.len();
-        for (index, item) in valid.into_iter().enumerate() {
-            if index == item_index {
-                return Some(item);
-            }
+        let (is_directory, item) = valid.into_iter().nth(item_index).unwrap();
+        let mut text = item.to_string();
+        if is_directory {
+            text += "/";
         }
+        Some(text)
+    } else {
+        None
     }
-
-    None
 }
 
 enum CommandInputModifier {
@@ -433,17 +436,13 @@ impl Shoe<'_> {
     /// Convert cwd to a string, also replacing home path with ~
     fn cwd_to_str(&self) -> Result<String> {
         let path = std::env::current_dir()?;
-        // convert to AbsoluteOrRelativePathBuf for the to_string() method
-        let path = AbsoluteOrRelativePathBuf::Absolute(path);
 
-        let path_string = path.to_string();
+        let path_string = absolute_pathbuf_to_string(&path);
 
         // replace the user home path with a tilde
 
         // first get the home path
-        let home_path =
-            AbsoluteOrRelativePathBuf::Absolute(shellexpand::tilde("~").to_string().into())
-                .to_string();
+        let home_path = absolute_pathbuf_to_string(&shellexpand::tilde("~").to_string().into());
 
         // if on windows, replace case insensitive
         // otherwise, regular replace
@@ -720,19 +719,20 @@ impl Shoe<'_> {
                     words.remove(word_index);
 
                     let result = autocomplete(&word.text, self.autocomplete_cycle_index.unwrap());
-                    let Some((autocompletion_is_dir, autocompletion)) = result else {
+                    let Some(mut autocompletion_string) = result else {
                         break 'tab;
                     };
-                    let mut autocompletion_string = autocompletion.to_string();
-                    if autocompletion_is_dir {
-                        autocompletion_string += "/";
-                    }
+
+                    // enclose in quotes if the autocompletion has spaces, and the original text doesnt have quotes
                     if autocompletion_string.contains(' ') && !starts_with_quote {
                         autocompletion_string = String::from("\"") + &autocompletion_string;
+
+                        // if this isnt the last word, also add end quote
                         if word_index != words.len() {
                             autocompletion_string += "\"";
                         }
                     }
+
                     self.cursor_pos +=
                         autocompletion_string.chars().count() - word.text.chars().count();
                     if starts_with_quote {
