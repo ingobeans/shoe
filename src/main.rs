@@ -439,7 +439,12 @@ impl Shoe<'_> {
         let path_string = path.to_string();
 
         // replace the user home path with a tilde
-        let home_path = shellexpand::tilde("~").to_string();
+
+        // first get the home path
+        let home_path =
+            AbsoluteOrRelativePathBuf::Absolute(shellexpand::tilde("~").to_string().into())
+                .to_string();
+
         // if on windows, replace case insensitive
         // otherwise, regular replace
         if env::consts::OS == "windows" {
