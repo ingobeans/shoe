@@ -439,54 +439,6 @@ impl Shoe<'_> {
             Ok(path.replace(&home_path, "~"))
         }
     }
-    fn generate_keyword_variants(&self, keyword: &String) -> Vec<String> {
-        // necessary function to ensure you can run files from their path or name if they're in the env PATH variable
-        // also on windows tries with different extensions
-        // (so you can type just 'example' instead of 'example.bat' or 'example.exe')
-        // a lot of this code may seem random but it is to fix very specific odd behaviours of windows
-        // but i tried to comment the specifics as much as possible
-        let is_path = keyword.contains('/') || keyword.contains('\\');
-        let keyword_has_file_extension = PathBuf::from(&keyword).extension().is_some();
-
-        let mut path_variants: Vec<String> = vec![keyword.to_string()];
-
-        // on windows try the keyword with more extensions
-        if env::consts::OS == "windows" && !keyword_has_file_extension {
-            path_variants.push(keyword.to_string() + ".exe");
-            path_variants.push(keyword.to_string() + ".bat");
-            path_variants.push(keyword.to_string() + ".cmd");
-        }
-
-        let cwd = std::env::current_dir();
-        if let Ok(cwd) = cwd {
-            for variant in &path_variants {
-                // check if a file with keyword as path exists relative to cwd
-                let variant_as_pathbuf = RelativePathBuf::from(&variant);
-                let real_path = variant_as_pathbuf.to_logical_path(&cwd);
-                if real_path.is_file() {
-                    // if the keyword is a path that does exist (possibly with the extra file extensions)
-                    // return the path directly, to ensure windows can find it
-                    // this fixes so you dont have to type './example' and can just do 'example'
-                    return vec![real_path.to_string_lossy().to_string()];
-                }
-            }
-        }
-
-        // if not keyword is a direct path to an executable
-
-        if !is_path {
-            // return variants with ".exe", ".bat" and ".cmd" extensions if keyword doesnt appear to be a path, i.e. you're probably running something by name from env PATH
-            // the reason for returning multiple variants here is that if a batch file is added to path, you'd otherwise have to type 'name.bat'
-            // but this ensures you only need 'name'.
-            path_variants
-        } else {
-            // if keyword does appear to be a path, even though it doesnt seem to exist, return the original keyword.
-            // here we dont try any other variants, since if you try running a batch file by path, that doesnt exist
-            // you get an error to command line output saying "<path> is not recognized as an internal or external command,operable program or batch file."
-            // instead of being caught when trying to create the process
-            vec![keyword.to_string()]
-        }
-    }
     fn execute_commands(&mut self, commands: Vec<Command>) -> Result<()> {
         // if command has output piped to the next, store the output here
         let mut last_piped_output: Option<Vec<u8>> = None;
@@ -593,65 +545,56 @@ impl Shoe<'_> {
                     }
                 }
 
-                // try multiple slight modifications of the keyword
-                // in case it failes.
-                // on windows, this includes trying the keyword with ".bat" and ".cmd" appended to the end (if keyword has no extension)
-                let keywords = self.generate_keyword_variants(&keyword);
+                // try to find actual executable of keyword using the 'which' crate
+                let which_result = which::which(&keyword);
 
-                // if any of the keywords succeeded
-                let mut any_worked = false;
+                // create process, using either the found path, or, if not found, the original keyword
+                let mut process = match which_result {
+                    Ok(path) => process::Command::new(path),
+                    Err(_) => process::Command::new(&keyword),
+                };
 
-                for keyword in keywords {
-                    let mut process = process::Command::new(&keyword);
-                    process.args(&command.args);
+                process.args(&command.args);
 
-                    // if there's stdin data, set process' stdin to piped
-                    if stdin_data.is_some() {
-                        process.stdin(Stdio::piped());
-                    }
-
-                    // if the command's output modifier is not default, set process' stdout to be piped (so we can handle it later)
-                    if !matches!(command.output_modifier, CommandOutputModifier::Default) {
-                        process.stdout(Stdio::piped());
-                    }
-
-                    // if process cant be spawned (path doesnt exist), test the next keyword variant
-                    let Ok(mut process) = process.spawn() else {
-                        continue;
-                    };
-
-                    // process was created successfully
-                    any_worked = true;
-
-                    if let Some(buf) = stdin_data {
-                        if let Some(stdin) = &mut process.stdin {
-                            stdin.write_all(&buf)?;
-                        }
-                    }
-                    let success = process.wait()?.success();
-
-                    // if process has readable stdout, strip it from ansi codes and store here
-                    let stripped_output: Option<Vec<u8>> = if let Some(stdout) = &mut process.stdout
-                    {
-                        let mut buf: Vec<u8> = Vec::new();
-                        stdout.read_to_end(&mut buf)?;
-                        let stripped = strip_ansi_escapes::strip(buf);
-                        Some(stripped)
-                    } else {
-                        None
-                    };
-
-                    // set success state to the process' success state (its error code being 0)
-                    last_success = Some(success);
-
-                    stdout_data = stripped_output;
-                    break;
+                // if there's stdin data, set process' stdin to piped
+                if stdin_data.is_some() {
+                    process.stdin(Stdio::piped());
                 }
-                if !any_worked {
+
+                // if the command's output modifier is not default, set process' stdout to be piped (so we can handle it later)
+                if !matches!(command.output_modifier, CommandOutputModifier::Default) {
+                    process.stdout(Stdio::piped());
+                }
+
+                // if process cant be spawned
+                let Ok(mut process) = process.spawn() else {
                     last_success = Some(false);
                     queue!(stdout(), SetForegroundColor(self.theme.err_color)).unwrap();
                     println!("file/command '{}' not found! :(", keyword);
+                    continue;
+                };
+
+                if let Some(buf) = stdin_data {
+                    if let Some(stdin) = &mut process.stdin {
+                        stdin.write_all(&buf)?;
+                    }
                 }
+                let success = process.wait()?.success();
+
+                // if process has readable stdout, strip it from ansi codes and store here
+                let stripped_output: Option<Vec<u8>> = if let Some(stdout) = &mut process.stdout {
+                    let mut buf: Vec<u8> = Vec::new();
+                    stdout.read_to_end(&mut buf)?;
+                    let stripped = strip_ansi_escapes::strip(buf);
+                    Some(stripped)
+                } else {
+                    None
+                };
+
+                // set success state to the process' success state (its error code being 0)
+                last_success = Some(success);
+
+                stdout_data = stripped_output;
             }
 
             // handle command output
