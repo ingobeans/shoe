@@ -222,8 +222,6 @@ fn cp(context: &mut CommandContext) -> Result<CommandResult> {
             dest_pathbuf.push(&name);
         }
 
-        println!("{:?} -> {:?}", source, dest_pathbuf);
-
         if source_is_file {
             std::fs::copy(&source, dest_pathbuf)?;
         } else {
