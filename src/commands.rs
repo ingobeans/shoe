@@ -64,11 +64,13 @@ fn match_file_pattern(pattern: &str) -> Result<(Vec<String>, PathBuf)> {
 }
 
 fn ls(context: &mut CommandContext) -> Result<CommandResult> {
-    let path = context.args.front().unwrap_or(&".");
-    if let Ok(metadata) = fs::metadata(path) {
-        if metadata.is_file() {
-            Err(std::io::Error::other("Path is a file"))?
-        }
+    let path: PathBuf = context.args.front().unwrap_or(&".").into();
+
+    if !path.exists() {
+        Err(std::io::Error::other("Directory doesn't exist"))?
+    }
+    if path.is_file() {
+        Err(std::io::Error::other("Path is a file"))?
     }
     let items = fs::read_dir(path)?;
 
@@ -98,8 +100,12 @@ fn ls(context: &mut CommandContext) -> Result<CommandResult> {
 fn cd(context: &mut CommandContext) -> Result<CommandResult> {
     let path = context.args.front();
     if let Some(path) = path {
-        let metadata = fs::metadata(path)?;
-        if metadata.is_file() {
+        let path = PathBuf::from(path);
+
+        if !path.exists() {
+            Err(std::io::Error::other("Directory doesn't exist"))?
+        }
+        if path.is_file() {
             Err(std::io::Error::other("Path is a file"))?
         }
         std::env::set_current_dir(path)?;
