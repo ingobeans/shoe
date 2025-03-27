@@ -12,7 +12,10 @@ use crossterm::{
     terminal,
 };
 
-use crate::utils::{Theme, THEMES};
+use crate::{
+    utils::{Theme, THEMES},
+    AbsoluteOrRelativePathBuf,
+};
 
 fn match_pattern(entries: &[String], pattern: &str) -> Vec<String> {
     if let Some(split) = pattern.split_once("*") {
@@ -113,13 +116,13 @@ fn cd(context: &mut CommandContext) -> Result<CommandResult> {
     Ok(CommandResult::Lovely)
 }
 fn pwd(context: &mut CommandContext) -> Result<CommandResult> {
-    writeln!(
-        context.stdout,
-        "{}",
-        std::env::current_dir()?
-            .to_str()
-            .ok_or(std::io::Error::other("Couldn't read path as string"))?
-    )?;
+    let path = std::env::current_dir()?;
+    // convert to AbsoluteOrRelativePathBuf for the to_string() method
+    let path = AbsoluteOrRelativePathBuf::Absolute(path);
+
+    let text = path.to_string();
+    writeln!(context.stdout, "{}", text)?;
+
     Ok(CommandResult::Lovely)
 }
 fn copy(context: &mut CommandContext) -> Result<CommandResult> {

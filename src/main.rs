@@ -432,17 +432,24 @@ impl Shoe<'_> {
     }
     /// Convert cwd to a string, also replacing home path with ~
     fn cwd_to_str(&self) -> Result<String> {
-        let path = std::env::current_dir()?
-            .to_str()
-            .ok_or(std::io::Error::other("Couldn't read path as string"))?
-            .to_string();
-        let home_path = shellexpand::tilde("~").to_string();
+        let path = std::env::current_dir()?;
+        // convert to AbsoluteOrRelativePathBuf for the to_string() method
+        let path = AbsoluteOrRelativePathBuf::Absolute(path);
 
+        let path_string = path.to_string();
+
+        // replace the user home path with a tilde
+        let home_path = shellexpand::tilde("~").to_string();
+        // if on windows, replace case insensitive
+        // otherwise, regular replace
         if env::consts::OS == "windows" {
-            // windows has case insensitive paths
-            Ok(replace_case_insensitive(path, home_path, "~".to_string()))
+            Ok(replace_case_insensitive(
+                path_string,
+                home_path,
+                "~".to_string(),
+            ))
         } else {
-            Ok(path.replace(&home_path, "~"))
+            Ok(path_string.replace(&home_path, "~"))
         }
     }
     fn execute_commands(&mut self, commands: Vec<Command>) -> Result<()> {
