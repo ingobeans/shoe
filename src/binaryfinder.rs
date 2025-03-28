@@ -52,7 +52,9 @@ pub fn get_items_in_path() -> HashMap<String, PathBuf> {
                     .to_lowercase();
 
                 let full_path: PathBuf = item.join(&name);
-                items.insert(name, full_path);
+                if !items.contains_key(&name) {
+                    items.insert(name, full_path);
+                }
             }
         }
     }
