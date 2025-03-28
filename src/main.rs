@@ -8,13 +8,14 @@ use crossterm::{
 };
 use relative_path::RelativePathBuf;
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     env,
     io::{stdout, Read, Result, Write},
     path::{Path, PathBuf},
     process::{self, Stdio},
 };
 use utils::{Theme, THEMES};
+mod binaryfinder;
 mod commands;
 mod utils;
 
@@ -387,6 +388,8 @@ struct Shoe<'a> {
     history_path: Option<String>,
     history: Vec<String>,
     history_index: usize,
+    path_items: HashMap<String, PathBuf>,
+    path_extensions: Vec<String>,
     theme: &'a Theme<'a>,
     running: bool,
     listening: bool,
@@ -423,6 +426,8 @@ impl Shoe<'_> {
             history_path,
             history,
             history_index,
+            path_items: binaryfinder::get_items_in_path(),
+            path_extensions: binaryfinder::get_path_extensions(),
             theme: &THEMES[0],
             running: false,
             listening: false,
@@ -563,14 +568,11 @@ impl Shoe<'_> {
                     }
                 }
 
-                // try to find actual executable of keyword using the 'which' crate
-                let which_result = which::which(&keyword);
+                let found_binary =
+                    binaryfinder::find_binary(&keyword, &self.path_items, &self.path_extensions)?;
 
                 // create process, using either the found path, or, if not found, the original keyword
-                let mut process = match which_result {
-                    Ok(path) => process::Command::new(path),
-                    Err(_) => process::Command::new(&keyword),
-                };
+                let mut process = process::Command::new(found_binary);
 
                 process.args(&command.args);
 
