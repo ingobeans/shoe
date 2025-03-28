@@ -138,6 +138,7 @@ fn get_script_runtime(script_extension: &str) -> Option<&str> {
     Some(match script_extension {
         "py" => "python",
         "js" => "node",
+        "vbs" => "wscript",
         _ => return None,
     })
 }
