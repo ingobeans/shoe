@@ -1,4 +1,4 @@
-use commands::CommandContext;
+use commands::{get_commands, CommandContext};
 use crossterm::{
     cursor::{MoveDown, MoveRight, MoveToColumn, MoveUp},
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
@@ -278,7 +278,7 @@ fn absolute_pathbuf_to_string(input: &PathBuf) -> String {
 }
 
 /// Autocomplete an input word to a relative or absolute path
-fn autocomplete(current_word: &String, mut item_index: usize) -> Option<String> {
+fn autocomplete_path(current_word: &String, mut item_index: usize) -> Option<String> {
     // stores all found valid entries
     // in tuple where first element is whether the item is a directory, and the second is the path
     let mut valid: Vec<(bool, AbsoluteOrRelativePathBuf)> = Vec::new();
@@ -355,6 +355,30 @@ fn autocomplete(current_word: &String, mut item_index: usize) -> Option<String> 
     }
 }
 
+fn autocomplete_keyword(
+    current_word: &String,
+    item_index: usize,
+    path_executables: &Vec<String>,
+) -> Option<String> {
+    // first try autocompleting the input as a string
+    let autocompleted_path = autocomplete_path(current_word, item_index);
+    if autocompleted_path.is_some() {
+        return autocompleted_path;
+    }
+    // look through built in commands for a match
+    for key in get_commands().keys() {
+        if key.starts_with(current_word) {
+            return Some(key.to_string());
+        }
+    }
+    // look through items in PATH to find a match
+    for key in path_executables {
+        if key.starts_with(current_word) {
+            return Some(key.to_owned());
+        }
+    }
+    None
+}
 enum CommandInputModifier {
     /// Read command input from file
     ReadFrom(String),
@@ -389,6 +413,7 @@ struct Shoe<'a> {
     history: Vec<String>,
     history_index: usize,
     path_items: HashMap<String, PathBuf>,
+    path_executables: Vec<String>,
     path_extensions: Vec<String>,
     theme: &'a Theme<'a>,
     running: bool,
@@ -422,12 +447,40 @@ impl Shoe<'_> {
         }
         let history_index = history.len();
 
+        let path_extensions = binaryfinder::get_path_extensions();
+        let path_items = binaryfinder::get_items_in_path();
+
+        // get all names of executables in path
+        let mut path_item_names = path_items
+            .keys()
+            .filter_map(|f| {
+                let pathbuf = PathBuf::from(f);
+                if let Some(extension) = pathbuf.extension() {
+                    // filter out items in path that dont have executable file extension
+                    if path_extensions.contains(&format!(".{}", extension.to_string_lossy())) {
+                        // return executable name without extension
+                        Some(pathbuf.file_stem().unwrap().to_string_lossy().to_string())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<String>>();
+
+        // sort the executables by length
+        path_item_names.sort_by(|a, b| a.len().cmp(&b.len()));
+
+        let path_executables = path_item_names;
+
         Shoe {
             history_path,
             history,
             history_index,
-            path_items: binaryfinder::get_items_in_path(),
-            path_extensions: binaryfinder::get_path_extensions(),
+            path_items,
+            path_executables,
+            path_extensions,
             theme: &THEMES[0],
             running: false,
             listening: false,
@@ -710,6 +763,7 @@ impl Shoe<'_> {
                         break 'tab;
                     };
                     let part_type = &words[word_index].part_type;
+                    let is_keyword = matches!(part_type, CommandPartType::Keyword);
 
                     // so we know if we need to strip before autocompletion and then re-add at the end
                     // not all QuoteArgs end with quotes, as one isnt needed, so we need to check that it actually ends with one.
@@ -721,7 +775,20 @@ impl Shoe<'_> {
                     let ends_with_space = words[word_index].text.ends_with(' ');
                     words.remove(word_index);
 
-                    let result = autocomplete(&word.text, self.autocomplete_cycle_index.unwrap());
+                    // try complete path
+
+                    // if on keyword, autocomplete as keyword (i.e. also include executables from PATH)
+                    let result = if is_keyword {
+                        autocomplete_keyword(
+                            &word.text,
+                            self.autocomplete_cycle_index.unwrap(),
+                            &self.path_executables,
+                        )
+                    } else {
+                        // if not on keyword, just autocomplete as path
+                        autocomplete_path(&word.text, self.autocomplete_cycle_index.unwrap())
+                    };
+
                     let Some(mut autocompletion_string) = result else {
                         break 'tab;
                     };

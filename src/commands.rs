@@ -1,5 +1,5 @@
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     fs,
     io::{Read, Result, Write},
     path::{Path, PathBuf},
@@ -303,23 +303,36 @@ fn theme(context: &mut CommandContext) -> Result<CommandResult> {
     }
 }
 
+pub fn get_commands(
+) -> HashMap<&'static str, &'static dyn Fn(&mut CommandContext) -> Result<CommandResult>> {
+    let mut commands: HashMap<&str, &dyn Fn(&mut CommandContext) -> Result<CommandResult>> =
+        HashMap::new();
+
+    // add commands
+    commands.insert("ls", &ls);
+    commands.insert("cd", &cd);
+    commands.insert("pwd", &pwd);
+    commands.insert("echo", &echo);
+    commands.insert("cls", &cls);
+    commands.insert("cat", &cat);
+    commands.insert("cp", &cp);
+    commands.insert("mv", &mv);
+    commands.insert("rm", &rm);
+    commands.insert("help", &help);
+    commands.insert("mkdir", &mkdir);
+    commands.insert("theme", &theme);
+    commands.insert("copy", &copy);
+    commands.insert("exit", &|_| Ok(CommandResult::Exit));
+
+    // return
+    commands
+}
+
 pub fn execute_command(keyword: &str, context: &mut CommandContext) -> Result<CommandResult> {
-    match keyword {
-        "ls" => ls(context),
-        "cd" => cd(context),
-        "pwd" => pwd(context),
-        "echo" => echo(context),
-        "cls" => cls(context),
-        "cat" => cat(context),
-        "cp" => cp(context),
-        "mv" => mv(context),
-        "rm" => rm(context),
-        "help" => help(context),
-        "mkdir" => mkdir(context),
-        "theme" => theme(context),
-        "copy" => copy(context),
-        "exit" => Ok(CommandResult::Exit),
-        _ => Ok(CommandResult::NotACommand),
+    if let Some(function) = get_commands().get(keyword) {
+        function(context)
+    } else {
+        Ok(CommandResult::NotACommand)
     }
 }
 
