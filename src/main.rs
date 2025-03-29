@@ -5,7 +5,7 @@ use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     queue,
     style::{Color, SetAttribute, SetForegroundColor},
-    terminal::{disable_raw_mode, enable_raw_mode, is_raw_mode_enabled, Clear, ClearType},
+    terminal::{self, disable_raw_mode, enable_raw_mode, is_raw_mode_enabled, Clear, ClearType},
 };
 use relative_path::RelativePathBuf;
 use std::{
@@ -1101,6 +1101,9 @@ impl Shoe<'_> {
         Ok(())
     }
     fn start(&mut self, rc: Vec<String>) -> Result<()> {
+        // set window title
+        queue!(stdout(), terminal::SetTitle("Shoe")).unwrap();
+
         // print banner
         queue!(stdout(), SetForegroundColor(Color::DarkGrey)).unwrap();
         print!("shoe ");
