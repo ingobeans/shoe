@@ -2,23 +2,25 @@ use std::{collections::HashMap, env, io::Result, path::PathBuf};
 
 use relative_path::RelativePathBuf;
 
-pub fn get_path_extensions() -> Vec<String> {
-    // joinked from `which` crate
+pub fn get_script_runtime(script_extension: &str) -> Option<&str> {
+    Some(match script_extension {
+        "py" => "python3",
+        "js" => "node",
+        "vbs" => "wscript",
+        _ => return None,
+    })
+}
 
-    env::var("PATHEXT")
-        .map(|pathext| {
-            pathext
-                .split(';')
-                .filter_map(|s| {
-                    if s.as_bytes().first() == Some(&b'.') {
-                        Some(s.to_owned().to_lowercase())
-                    } else {
-                        None
-                    }
-                })
-                .collect()
-        })
-        .unwrap_or_default()
+pub fn get_path_extensions() -> Vec<String> {
+    if env::consts::OS != "windows" {
+        Vec::new()
+    } else {
+        vec![
+            String::from(".exe"),
+            String::from(".bat"),
+            String::from(".cmd"),
+        ]
+    }
 }
 
 pub fn get_path_variants(path: &str, path_extensions: &Vec<String>) -> Vec<String> {

@@ -1,3 +1,4 @@
+use binaryfinder::get_script_runtime;
 use commands::{get_commands, CommandContext};
 use crossterm::{
     cursor::{MoveDown, MoveRight, MoveToColumn, MoveUp},
@@ -115,6 +116,7 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
     // return parts
     parts
 }
+
 fn move_cursor_to_cursor_pos(original_x: usize, pos: usize, width: usize) -> Result<()> {
     let new_x = (original_x + pos) % width;
     let rows = (original_x + pos) / width;
@@ -133,15 +135,6 @@ fn move_back_to(original_x: usize, steps: usize, width: usize) -> Result<()> {
     }
     queue!(stdout(), MoveToColumn(original_x as u16))?;
     Ok(())
-}
-
-fn get_script_runtime(script_extension: &str) -> Option<&str> {
-    Some(match script_extension {
-        "py" => "python",
-        "js" => "node",
-        "vbs" => "wscript",
-        _ => return None,
-    })
 }
 
 fn write_file<P, C>(path: P, contents: C, append: bool) -> std::io::Result<()>
@@ -777,7 +770,7 @@ impl Shoe<'_> {
 
                     // try complete path
 
-                    // if on keyword, autocomplete as keyword (i.e. also include executables from PATH)
+                    // if on keyword, autocomplete as keyword (i.e. also include executables from PATH)c
                     let result = if is_keyword {
                         autocomplete_keyword(
                             &word.text,
