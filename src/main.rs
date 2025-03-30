@@ -320,16 +320,13 @@ fn autocomplete_path(current_word: &String, mut item_index: usize) -> Option<Str
         let relative_parent = path.parent()?;
 
         let contents = list_dir(absolute_parent).ok()?;
-        for (is_dir, mut item) in contents {
+        for (is_dir, item) in contents {
             let item_in_maybe_lowercase = if env::consts::OS == "windows" {
                 item.to_lowercase()
             } else {
                 item.clone()
             };
             if item_in_maybe_lowercase.starts_with(&file_name) {
-                if current_word.starts_with("~/") {
-                    item = "~/".to_string() + &item;
-                }
                 let real_item = relative_parent.join(item);
                 valid.push((is_dir, AbsoluteOrRelativePathBuf::Relative(real_item)));
             }
@@ -341,6 +338,9 @@ fn autocomplete_path(current_word: &String, mut item_index: usize) -> Option<Str
         let mut text = item.to_string();
         if is_directory {
             text += "/";
+        }
+        if current_word.starts_with("~/") {
+            text = "~/".to_string() + &text.trim_start_matches('/');
         }
         Some(text)
     } else {
