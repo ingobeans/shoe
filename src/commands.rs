@@ -124,10 +124,6 @@ fn pwd(context: &mut CommandContext) -> Result<CommandResult> {
     Ok(CommandResult::Lovely)
 }
 fn copy(context: &mut CommandContext) -> Result<CommandResult> {
-    // dont trim if -n or --no-trim flags
-    // by default trimming is enabled, so that `echo hello | copy` copies "hello" and not "hello\n"
-    let trim_end = !(context.args.contains(&"-n") || context.args.contains(&"--no-trim"));
-
     // to avoid panic
     if context.stdin.is_empty() {
         return Ok(CommandResult::Lovely);
@@ -135,10 +131,7 @@ fn copy(context: &mut CommandContext) -> Result<CommandResult> {
 
     // try decoding stdin as utf_8
     match std::str::from_utf8(&context.stdin) {
-        Ok(mut text) => {
-            if trim_end {
-                text = text.trim_end_matches('\n');
-            }
+        Ok(text) => {
             // create a clipboard context
             let Ok(mut ctx) = copypasta::ClipboardContext::new() else {
                 return Err(std::io::Error::other("Couldn't access clipboard"));
@@ -153,12 +146,18 @@ fn copy(context: &mut CommandContext) -> Result<CommandResult> {
     }
 }
 fn echo(context: &mut CommandContext) -> Result<CommandResult> {
+    // dont add newline if -n or --no-newline
+    let newline = !(context.args.contains(&"-n") || context.args.contains(&"--no-newline"));
+
     queue!(context.stdout, SetForegroundColor(Color::Reset))?;
     if !context.stdin.is_empty() {
         context.stdout.append(&mut context.stdin);
         return Ok(CommandResult::Lovely);
     }
     for line in context.args {
+        if *line == "-n" || *line == "--no-newline" {
+            continue;
+        }
         for part in line.split("\\x") {
             let hex = &part.trim_start_matches("\\x");
             if hex.len() >= 2 {
@@ -173,7 +172,9 @@ fn echo(context: &mut CommandContext) -> Result<CommandResult> {
             }
             write!(context.stdout, "{}", part)?;
         }
-        write!(context.stdout, "\n")?;
+        if newline {
+            write!(context.stdout, "\n")?;
+        }
     }
     Ok(CommandResult::Lovely)
 }

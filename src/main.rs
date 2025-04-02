@@ -596,12 +596,15 @@ impl Shoe<'_> {
                             self.theme = &THEMES[new_index];
                         }
                         commands::CommandResult::Lovely => {
+                            let output_utf8 = String::from_utf8_lossy(&output_buf);
                             if let CommandOutputModifier::Default = output_modifier {
                                 // write output
-                                stdout().lock().write_all(&output_buf)?;
+                                write!(stdout(), "{output_utf8}")?;
                             }
-                            let stripped_output = strip_ansi_escapes::strip(output_buf);
-                            stdout_data = Some(stripped_output);
+                            if output_utf8.contains('\x1B') {
+                                output_buf = strip_ansi_escapes::strip(output_buf);
+                            }
+                            stdout_data = Some(output_buf);
                         }
                         commands::CommandResult::NotACommand => {
                             not_a_builtin_command = true;
