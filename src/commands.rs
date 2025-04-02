@@ -158,11 +158,13 @@ fn echo(context: &mut CommandContext) -> Result<CommandResult> {
         if *line == "-n" || *line == "--no-newline" {
             continue;
         }
+        let mut first = true;
         for part in line.split("\\x") {
-            let hex = &part.trim_start_matches("\\x");
-            if hex.len() >= 2 {
-                let hex = hex[..2].trim();
-                let value = i64::from_str_radix(hex, 16);
+            if first {
+                first = false;
+            } else if part.trim().len() == 2 {
+                let part = part.trim();
+                let value = i64::from_str_radix(part, 16);
                 if let Ok(value) = value {
                     if let Ok(value) = value.try_into() {
                         context.stdout.push(value);
