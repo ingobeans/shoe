@@ -159,9 +159,10 @@ fn echo(context: &mut CommandContext) -> Result<CommandResult> {
         return Ok(CommandResult::Lovely);
     }
     for line in context.args {
-        for word in line.split(' ') {
-            if word.starts_with("\\x") {
-                let hex = word.trim_start_matches("\\x");
+        for part in line.split("\\x") {
+            let hex = &part.trim_start_matches("\\x");
+            if hex.len() >= 2 {
+                let hex = hex[..2].trim();
                 let value = i64::from_str_radix(hex, 16);
                 if let Ok(value) = value {
                     if let Ok(value) = value.try_into() {
@@ -170,7 +171,7 @@ fn echo(context: &mut CommandContext) -> Result<CommandResult> {
                     }
                 }
             }
-            write!(context.stdout, "{} ", word)?;
+            write!(context.stdout, "{}", part)?;
         }
         write!(context.stdout, "\n")?;
     }
