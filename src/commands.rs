@@ -149,7 +149,6 @@ fn echo(context: &mut CommandContext) -> Result<CommandResult> {
     // dont add newline if -n or --no-newline
     let newline = !(context.args.contains(&"-n") || context.args.contains(&"--no-newline"));
 
-    queue!(context.stdout, SetForegroundColor(Color::Reset))?;
     if !context.stdin.is_empty() {
         context.stdout.append(&mut context.stdin);
         return Ok(CommandResult::Lovely);
