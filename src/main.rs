@@ -41,6 +41,8 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
         let last_was_backslash = last_char_was_backslash;
         last_char_was_backslash = false;
 
+        let mut text_to_add = char.to_string();
+
         match char {
             '\\' => {
                 if include_seperators || last_was_backslash {
@@ -49,20 +51,22 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
                 last_char_was_backslash = !last_was_backslash;
                 continue;
             }
-            '"' if !last_was_backslash && (in_quote || last.text.is_empty()) => {
-                in_quote = !in_quote;
-                if include_seperators {
-                    last.text.insert(last.text.len(), char);
+            '"' if in_quote || last.text.is_empty() => {
+                if !last_was_backslash {
+                    in_quote = !in_quote;
+                    if include_seperators {
+                        last.text.insert(last.text.len(), char);
+                    }
+                    if in_quote {
+                        last.part_type = CommandPartType::QuotesArg;
+                    } else {
+                        parts.push_back(CommandPart {
+                            text: String::new(),
+                            part_type: CommandPartType::RegularArg,
+                        });
+                    }
+                    continue;
                 }
-                if in_quote {
-                    last.part_type = CommandPartType::QuotesArg;
-                } else {
-                    parts.push_back(CommandPart {
-                        text: String::new(),
-                        part_type: CommandPartType::RegularArg,
-                    });
-                }
-                continue;
             }
             ' ' if !in_quote => {
                 if include_seperators {
@@ -74,28 +78,38 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
                 });
                 continue;
             }
-            ';' | '|' | '>' | '&' | '<' if !in_quote && !last_was_backslash => {
-                if !matches!(last.part_type, CommandPartType::Special) && !last.text.is_empty() {
-                    parts.push_back(CommandPart {
-                        text: String::from(char),
-                        part_type: CommandPartType::Special,
-                    });
+            ';' | '|' | '>' | '&' | '<' if !in_quote => {
+                if !last_was_backslash {
+                    if !matches!(last.part_type, CommandPartType::Special) && !last.text.is_empty()
+                    {
+                        parts.push_back(CommandPart {
+                            text: String::from(char),
+                            part_type: CommandPartType::Special,
+                        });
+                        continue;
+                    }
+                    last.part_type = CommandPartType::Special;
+                    last.text.insert(last.text.len(), char);
                     continue;
                 }
-                last.part_type = CommandPartType::Special;
-                last.text.insert(last.text.len(), char);
-                continue;
             }
-            _ => {}
+            _ => {
+                if last_was_backslash {
+                    if include_seperators {
+                        last.text.pop();
+                    }
+                    text_to_add = '\\'.to_string() + &text_to_add;
+                }
+            }
         }
         if let CommandPartType::Special = last.part_type {
             parts.push_back(CommandPart {
-                text: String::from(char),
+                text: text_to_add,
                 part_type: CommandPartType::RegularArg,
             });
             continue;
         }
-        last.text.insert(last.text.len(), char);
+        last.text += &text_to_add;
     }
     // make first non empty regular arg after each seperator a keyword
     let mut make_keyword = true;
