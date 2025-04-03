@@ -700,7 +700,14 @@ impl Shoe<'_> {
                         write_file(path, stdout_data, *append)?;
                     }
                 }
-                _ => {}
+                CommandOutputModifier::Default => {
+                    stdout().flush()?;
+                    // check the position of the cursor after command was run, if not at beginning of line, print new line
+                    let (cursor_x, _) = crossterm::cursor::position()?;
+                    if cursor_x != 0 {
+                        println!("");
+                    }
+                }
             }
         }
         Ok(())
