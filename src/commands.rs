@@ -157,22 +157,42 @@ fn echo(context: &mut CommandContext) -> Result<CommandResult> {
         if *line == "-n" || *line == "--no-newline" {
             continue;
         }
-        let mut first = true;
-        for part in line.split("\\x") {
-            if first {
-                first = false;
-            } else if part.trim().len() == 2 {
-                let part = part.trim();
-                let value = i64::from_str_radix(part, 16);
-                if let Ok(value) = value {
-                    if let Ok(value) = value.try_into() {
-                        context.stdout.push(value);
-                        continue;
+
+        let mut output: Vec<u8> = Vec::new();
+        let mut last_was_backslash = false;
+        let mut current_hex = None;
+
+        // parse text for hex, like \x00
+        for c in line.as_bytes() {
+            if *c == b'\\' {
+                last_was_backslash = true;
+            } else if *c == b'x' && last_was_backslash {
+                current_hex = Some(Vec::new());
+            } else if let Some(value) = &mut current_hex {
+                value.push(*c);
+                let as_string = std::str::from_utf8(value);
+                if as_string.is_err() {
+                    current_hex = None;
+                } else if as_string.unwrap().len() >= 2 {
+                    let parsed = u8::from_str_radix(as_string.unwrap(), 16);
+                    if let Ok(parsed) = parsed {
+                        output.push(parsed);
+                        current_hex = None;
+                    } else {
+                        // if the submitted hex isnt valid hex, write it as text instead
+                        output.push(b'\\');
+                        output.push(b'x');
+                        output.append(value);
+                        current_hex = None;
                     }
                 }
+            } else {
+                last_was_backslash = false;
+                output.push(*c);
             }
-            write!(context.stdout, "{}", part)?;
         }
+
+        context.stdout.append(&mut output);
         if newline {
             write!(context.stdout, "\n")?;
         }
