@@ -27,6 +27,16 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
     // i hate this code
     // too much logic
     let mut parts = VecDeque::new();
+    // if input is simply a math expression, return it
+    let eval_result = meval::eval_str(text);
+    if eval_result.is_ok() {
+        parts.push_back(CommandPart {
+            text: text.to_string(),
+            part_type: CommandPartType::Keyword,
+        });
+        return parts;
+    }
+
     parts.push_back(CommandPart {
         text: String::new(),
         part_type: CommandPartType::RegularArg,
@@ -1097,6 +1107,14 @@ impl Shoe<'_> {
         self.history_index = self.history.len();
 
         let mut parts = remove_empty_parts(parse_parts(command, false));
+
+        // check if input may be math expression, if so, evaluate it
+        let eval_result = meval::eval_str(&command);
+        if let Ok(eval) = eval_result {
+            queue!(stdout(), SetForegroundColor(Color::Reset))?;
+            println!("{}", eval);
+            return Ok(());
+        }
 
         if self.substitute_tildes {
             for part in parts.iter_mut() {
