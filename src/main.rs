@@ -1298,9 +1298,9 @@ fn main() {
     // construct shoe instance
     let mut shoe = Shoe::new(path);
 
-    // if argument was -c, dont continue running shell
+    // if argument was -c
     if exit_after_run_command {
-        return;
+        rc.push(String::from("exit"));
     }
 
     // run, and pass rc commands
