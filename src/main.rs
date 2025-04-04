@@ -32,14 +32,14 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
     if eval_result.is_ok() {
         parts.push_back(CommandPart {
             text: text.to_string(),
-            part_type: CommandPartType::Keyword,
+            ty: CommandPartType::Keyword,
         });
         return parts;
     }
 
     parts.push_back(CommandPart {
         text: String::new(),
-        part_type: CommandPartType::RegularArg,
+        ty: CommandPartType::RegularArg,
     });
     let mut last_char_was_backslash = false;
     let mut in_quote = false;
@@ -68,11 +68,11 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
                         last.text.insert(last.text.len(), char);
                     }
                     if in_quote {
-                        last.part_type = CommandPartType::QuotesArg;
+                        last.ty = CommandPartType::QuotesArg;
                     } else {
                         parts.push_back(CommandPart {
                             text: String::new(),
-                            part_type: CommandPartType::RegularArg,
+                            ty: CommandPartType::RegularArg,
                         });
                     }
                     continue;
@@ -84,21 +84,20 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
                 }
                 parts.push_back(CommandPart {
                     text: String::new(),
-                    part_type: CommandPartType::RegularArg,
+                    ty: CommandPartType::RegularArg,
                 });
                 continue;
             }
             ';' | '|' | '>' | '&' | '<' if !in_quote => {
                 if !last_was_backslash {
-                    if !matches!(last.part_type, CommandPartType::Special) && !last.text.is_empty()
-                    {
+                    if !matches!(last.ty, CommandPartType::Special) && !last.text.is_empty() {
                         parts.push_back(CommandPart {
                             text: String::from(char),
-                            part_type: CommandPartType::Special,
+                            ty: CommandPartType::Special,
                         });
                         continue;
                     }
-                    last.part_type = CommandPartType::Special;
+                    last.ty = CommandPartType::Special;
                     last.text.insert(last.text.len(), char);
                     continue;
                 }
@@ -112,10 +111,10 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
                 }
             }
         }
-        if let CommandPartType::Special = last.part_type {
+        if let CommandPartType::Special = last.ty {
             parts.push_back(CommandPart {
                 text: text_to_add,
-                part_type: CommandPartType::RegularArg,
+                ty: CommandPartType::RegularArg,
             });
             continue;
         }
@@ -124,11 +123,11 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
     // make first non empty regular arg after each seperator a keyword
     let mut make_keyword = true;
     for part in parts.iter_mut() {
-        match part.part_type {
+        match part.ty {
             CommandPartType::RegularArg => {
                 if make_keyword && !part.text.trim().is_empty() {
                     make_keyword = false;
-                    part.part_type = CommandPartType::Keyword;
+                    part.ty = CommandPartType::Keyword;
                 }
             }
             CommandPartType::Special => {
@@ -198,7 +197,7 @@ where
 fn remove_empty_parts(parts: VecDeque<CommandPart>) -> VecDeque<CommandPart> {
     let mut new = VecDeque::new();
     for part in parts {
-        if part.text.trim().is_empty() && !matches!(part.part_type, CommandPartType::QuotesArg) {
+        if part.text.trim().is_empty() && !matches!(part.ty, CommandPartType::QuotesArg) {
         } else {
             new.push_back(part);
         }
@@ -799,7 +798,7 @@ impl Shoe<'_> {
                     let Some((word_index, word)) = self.get_word_at_cursor() else {
                         break 'tab;
                     };
-                    let part_type = &words[word_index].part_type;
+                    let part_type = &words[word_index].ty;
                     let is_keyword = matches!(part_type, CommandPartType::Keyword);
 
                     // so we know if we need to strip before autocompletion and then re-add at the end
@@ -929,7 +928,7 @@ impl Shoe<'_> {
     fn print_text(&self) -> Result<()> {
         let parts = parse_parts(&self.input_text, true);
         for part in parts {
-            let color = match part.part_type {
+            let color = match part.ty {
                 CommandPartType::Keyword => self.theme.primary_color,
                 CommandPartType::QuotesArg => self.theme.secondary_color,
                 CommandPartType::RegularArg => {
@@ -1023,7 +1022,7 @@ impl Shoe<'_> {
             index += 1;
             let mut done = false;
             if let Some(command) = &mut current_command {
-                if let CommandPartType::Special = part.part_type {
+                if let CommandPartType::Special = part.ty {
                     match part.text.as_str() {
                         ";" | "&" => {
                             done = true;
@@ -1219,7 +1218,7 @@ enum CommandPartType {
 }
 struct CommandPart {
     text: String,
-    part_type: CommandPartType,
+    ty: CommandPartType,
 }
 
 fn main() {
