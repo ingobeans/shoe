@@ -23,28 +23,28 @@ mod utils;
 /// Function parse line to arguments, with support for quote enclosures
 ///
 /// Include seperators will ensure no character of text is lost
-fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
+fn parse_text_to_tokens(text: &str, include_seperators: bool) -> VecDeque<Token> {
     // i hate this code
     // too much logic
-    let mut parts = VecDeque::new();
+    let mut tokens = VecDeque::new();
     // if input is simply a math expression, return it
     let eval_result = meval::eval_str(text);
     if eval_result.is_ok() {
-        parts.push_back(CommandPart {
+        tokens.push_back(Token {
             text: text.to_string(),
-            ty: CommandPartType::Keyword,
+            ty: TokenType::Keyword,
         });
-        return parts;
+        return tokens;
     }
 
-    parts.push_back(CommandPart {
+    tokens.push_back(Token {
         text: String::new(),
-        ty: CommandPartType::RegularArg,
+        ty: TokenType::RegularArg,
     });
     let mut last_char_was_backslash = false;
     let mut in_quote = false;
     for char in text.chars() {
-        let last = parts.back_mut().unwrap();
+        let last = tokens.back_mut().unwrap();
 
         // set `last_char_was_backslash` to false
         // while storing the original value in new `last_was_backslash`
@@ -68,11 +68,11 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
                         last.text.insert(last.text.len(), char);
                     }
                     if in_quote {
-                        last.ty = CommandPartType::QuotesArg;
+                        last.ty = TokenType::QuotesArg;
                     } else {
-                        parts.push_back(CommandPart {
+                        tokens.push_back(Token {
                             text: String::new(),
-                            ty: CommandPartType::RegularArg,
+                            ty: TokenType::RegularArg,
                         });
                     }
                     continue;
@@ -82,22 +82,22 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
                 if include_seperators {
                     last.text.insert(last.text.len(), char);
                 }
-                parts.push_back(CommandPart {
+                tokens.push_back(Token {
                     text: String::new(),
-                    ty: CommandPartType::RegularArg,
+                    ty: TokenType::RegularArg,
                 });
                 continue;
             }
             ';' | '|' | '>' | '&' | '<' if !in_quote => {
                 if !last_was_backslash {
-                    if !matches!(last.ty, CommandPartType::Special) && !last.text.is_empty() {
-                        parts.push_back(CommandPart {
+                    if !matches!(last.ty, TokenType::Special) && !last.text.is_empty() {
+                        tokens.push_back(Token {
                             text: String::from(char),
-                            ty: CommandPartType::Special,
+                            ty: TokenType::Special,
                         });
                         continue;
                     }
-                    last.ty = CommandPartType::Special;
+                    last.ty = TokenType::Special;
                     last.text.insert(last.text.len(), char);
                     continue;
                 }
@@ -111,10 +111,10 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
                 }
             }
         }
-        if let CommandPartType::Special = last.ty {
-            parts.push_back(CommandPart {
+        if let TokenType::Special = last.ty {
+            tokens.push_back(Token {
                 text: text_to_add,
-                ty: CommandPartType::RegularArg,
+                ty: TokenType::RegularArg,
             });
             continue;
         }
@@ -122,22 +122,22 @@ fn parse_parts(text: &str, include_seperators: bool) -> VecDeque<CommandPart> {
     }
     // make first non empty regular arg after each seperator a keyword
     let mut make_keyword = true;
-    for part in parts.iter_mut() {
-        match part.ty {
-            CommandPartType::RegularArg => {
-                if make_keyword && !part.text.trim().is_empty() {
+    for token in tokens.iter_mut() {
+        match token.ty {
+            TokenType::RegularArg => {
+                if make_keyword && !token.text.trim().is_empty() {
                     make_keyword = false;
-                    part.ty = CommandPartType::Keyword;
+                    token.ty = TokenType::Keyword;
                 }
             }
-            CommandPartType::Special => {
+            TokenType::Special => {
                 make_keyword = true;
             }
             _ => {}
         }
     }
-    // return parts
-    parts
+    // return tokens
+    tokens
 }
 
 fn move_cursor_to_cursor_pos(original_x: usize, pos: usize, width: usize) -> Result<()> {
@@ -194,12 +194,12 @@ where
         std::fs::write(path, file_contents)
     }
 }
-fn remove_empty_parts(parts: VecDeque<CommandPart>) -> VecDeque<CommandPart> {
+fn remove_empty_tokens(tokens: VecDeque<Token>) -> VecDeque<Token> {
     let mut new = VecDeque::new();
-    for part in parts {
-        if part.text.trim().is_empty() && !matches!(part.ty, CommandPartType::QuotesArg) {
+    for token in tokens {
+        if token.text.trim().is_empty() && !matches!(token.ty, TokenType::QuotesArg) {
         } else {
-            new.push_back(part);
+            new.push_back(token);
         }
     }
     new
@@ -747,12 +747,15 @@ impl Shoe<'_> {
         }
         self.input_text = new;
     }
-    fn get_word_at_cursor(&self) -> Option<(usize, CommandPart)> {
+    fn get_word_at_cursor(&self) -> Option<(usize, Token)> {
         let mut counter = 0;
-        for (index, part) in parse_parts(&self.input_text, false).into_iter().enumerate() {
-            counter += part.text.chars().count() + 1;
+        for (index, token) in parse_text_to_tokens(&self.input_text, false)
+            .into_iter()
+            .enumerate()
+        {
+            counter += token.text.chars().count() + 1;
             if counter >= self.cursor_pos {
-                return Some((index, part));
+                return Some((index, token));
             }
         }
         None
@@ -794,19 +797,19 @@ impl Shoe<'_> {
                         self.autocomplete_cycle_index = Some(0);
                         self.last_input_before_autocomplete = Some(self.input_text.to_string());
                     }
-                    let mut words = parse_parts(&self.input_text, true);
+                    let mut words = parse_text_to_tokens(&self.input_text, true);
                     let Some((word_index, word)) = self.get_word_at_cursor() else {
                         break 'tab;
                     };
-                    let part_type = &words[word_index].ty;
-                    let is_keyword = matches!(part_type, CommandPartType::Keyword);
+                    let token_type = &words[word_index].ty;
+                    let is_keyword = matches!(token_type, TokenType::Keyword);
 
                     // so we know if we need to strip before autocompletion and then re-add at the end
                     // not all QuoteArgs end with quotes, as one isnt needed, so we need to check that it actually ends with one.
-                    let ends_with_quote = matches!(part_type, CommandPartType::QuotesArg)
+                    let ends_with_quote = matches!(token_type, TokenType::QuotesArg)
                         && words[word_index].text.ends_with('"');
                     // all QuotesArgs will start with a quote
-                    let starts_with_quote = matches!(part_type, CommandPartType::QuotesArg);
+                    let starts_with_quote = matches!(token_type, TokenType::QuotesArg);
 
                     let ends_with_space = words[word_index].text.ends_with(' ');
                     words.remove(word_index);
@@ -926,22 +929,22 @@ impl Shoe<'_> {
     }
     /// Prints current inputted text with color highlighting
     fn print_text(&self) -> Result<()> {
-        let parts = parse_parts(&self.input_text, true);
-        for part in parts {
-            let color = match part.ty {
-                CommandPartType::Keyword => self.theme.primary_color,
-                CommandPartType::QuotesArg => self.theme.secondary_color,
-                CommandPartType::RegularArg => {
-                    if part.text.starts_with("-") {
+        let tokens = parse_text_to_tokens(&self.input_text, true);
+        for token in tokens {
+            let color = match token.ty {
+                TokenType::Keyword => self.theme.primary_color,
+                TokenType::QuotesArg => self.theme.secondary_color,
+                TokenType::RegularArg => {
+                    if token.text.starts_with("-") {
                         self.theme.secondary_color
                     } else {
                         Color::White
                     }
                 }
-                CommandPartType::Special => self.theme.secondary_color,
+                TokenType::Special => self.theme.secondary_color,
             };
             queue!(stdout(), SetForegroundColor(color))?;
-            print!("{}", part.text);
+            print!("{}", token.text);
         }
         Ok(())
     }
@@ -1011,19 +1014,19 @@ impl Shoe<'_> {
         }
         None
     }
-    fn parts_to_commands_vec(parts: &VecDeque<CommandPart>) -> Result<Vec<Command>> {
+    fn tokens_to_commands_vec(tokens: &VecDeque<Token>) -> Result<Vec<Command>> {
         let mut commands: Vec<Command> = Vec::new();
         let mut current_command: Option<Command> = None;
         let mut index = 0;
         let mut next_run_condition = RunCondition::Any;
 
-        while index < parts.len() {
-            let part = &parts[index];
+        while index < tokens.len() {
+            let token = &tokens[index];
             index += 1;
             let mut done = false;
             if let Some(command) = &mut current_command {
-                if let CommandPartType::Special = part.ty {
-                    match part.text.as_str() {
+                if let TokenType::Special = token.ty {
+                    match token.text.as_str() {
                         ";" | "&" => {
                             done = true;
                         }
@@ -1041,30 +1044,30 @@ impl Shoe<'_> {
                         }
                         ">" => {
                             command.output_modifier =
-                                CommandOutputModifier::WriteTo(parts[index].text.clone(), false);
+                                CommandOutputModifier::WriteTo(tokens[index].text.clone(), false);
                             index += 1;
                         }
                         ">>" => {
                             command.output_modifier =
-                                CommandOutputModifier::WriteTo(parts[index].text.clone(), true);
+                                CommandOutputModifier::WriteTo(tokens[index].text.clone(), true);
                             index += 1;
                         }
                         "<" => {
                             command.input_modifier =
-                                CommandInputModifier::ReadFrom(parts[index].text.clone());
+                                CommandInputModifier::ReadFrom(tokens[index].text.clone());
                             index += 1;
                         }
                         _ => {
-                            let message = format!("unexpected token '{}'", part.text);
+                            let message = format!("unexpected token '{}'", token.text);
                             return Err(std::io::Error::other(message));
                         }
                     }
                 } else {
-                    command.args.push_back(&part.text);
+                    command.args.push_back(&token.text);
                 }
             } else {
                 current_command = Some(Command {
-                    keyword: part.text.clone(),
+                    keyword: token.text.clone(),
                     args: VecDeque::new(),
                     output_modifier: CommandOutputModifier::Default,
                     input_modifier: CommandInputModifier::Default,
@@ -1073,7 +1076,7 @@ impl Shoe<'_> {
                 next_run_condition = RunCondition::Any;
             }
 
-            if done || index == parts.len() {
+            if done || index == tokens.len() {
                 if let Some(command) = current_command {
                     commands.push(command);
                     current_command = None;
@@ -1105,7 +1108,7 @@ impl Shoe<'_> {
 
         self.history_index = self.history.len();
 
-        let mut parts = remove_empty_parts(parse_parts(command, false));
+        let mut tokens = remove_empty_tokens(parse_text_to_tokens(command, false));
 
         // check if input may be math expression, if so, evaluate it
         let eval_result = meval::eval_str(&command);
@@ -1116,10 +1119,10 @@ impl Shoe<'_> {
         }
 
         if self.substitute_tildes {
-            for part in parts.iter_mut() {
-                if part.text.contains('~') {
-                    let new = shellexpand::tilde(&part.text).to_string();
-                    part.text = new;
+            for token in tokens.iter_mut() {
+                if token.text.contains('~') {
+                    let new = shellexpand::tilde(&token.text).to_string();
+                    token.text = new;
                 }
             }
         }
@@ -1127,7 +1130,7 @@ impl Shoe<'_> {
         // store any errors that arise here
         let mut err: Option<std::io::Error> = None;
 
-        let commands = Self::parts_to_commands_vec(&parts);
+        let commands = Self::tokens_to_commands_vec(&tokens);
         match commands {
             Ok(commands) => {
                 let execution_result = self.execute_commands(commands);
@@ -1210,15 +1213,15 @@ impl Shoe<'_> {
     }
 }
 
-enum CommandPartType {
+enum TokenType {
     Keyword,
     QuotesArg,
     RegularArg,
     Special,
 }
-struct CommandPart {
+struct Token {
     text: String,
-    ty: CommandPartType,
+    ty: TokenType,
 }
 
 fn main() {
