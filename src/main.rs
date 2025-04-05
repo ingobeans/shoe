@@ -214,10 +214,7 @@ where
     }
 }
 
-fn filter_tokens_and_parse_vars(
-    tokens: VecDeque<Token>,
-    env_vars: &HashMap<String, String>,
-) -> VecDeque<Token> {
+fn filter_tokens_and_parse_vars(tokens: VecDeque<Token>) -> VecDeque<Token> {
     let mut new: VecDeque<Token> = VecDeque::new();
 
     let mut join = false;
@@ -225,9 +222,7 @@ fn filter_tokens_and_parse_vars(
 
     for mut token in tokens {
         if let TokenType::EnvironmentVariable = token.ty.clone() {
-            token.text = env_vars
-                .get(&token.text.to_lowercase())
-                .map_or(String::new(), |f| f.to_owned());
+            token.text = env::var(token.text).map_or(String::new(), |f| f.to_owned());
             if last_was_empty {
                 new.push_back(Token {
                     text: String::new(),
@@ -478,7 +473,6 @@ struct Shoe<'a> {
     history_path: Option<String>,
     history: Vec<String>,
     history_index: usize,
-    env_vars: HashMap<String, String>,
     path_items: HashMap<String, PathBuf>,
     path_executables: Vec<String>,
     path_extensions: Vec<String>,
@@ -541,15 +535,10 @@ impl Shoe<'_> {
 
         let path_executables = path_item_names;
 
-        let env_vars = env::vars()
-            .map(|(k, v)| (k.to_lowercase(), v))
-            .collect::<HashMap<String, String>>();
-
         Shoe {
             history_path,
             history,
             history_index,
-            env_vars,
             path_items,
             path_executables,
             path_extensions,
@@ -1165,8 +1154,7 @@ impl Shoe<'_> {
 
         self.history_index = self.history.len();
 
-        let mut tokens =
-            filter_tokens_and_parse_vars(parse_text_to_tokens(command, false), &self.env_vars);
+        let mut tokens = filter_tokens_and_parse_vars(parse_text_to_tokens(command, false));
 
         // check if input may be math expression, if so, evaluate it
         let eval_result = meval::eval_str(&command);
