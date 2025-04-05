@@ -166,8 +166,10 @@ fn echo(context: &mut CommandContext) -> Result<CommandResult> {
         for c in line.as_bytes() {
             if *c == b'\\' {
                 last_was_backslash = true;
+                output.push(*c);
             } else if *c == b'x' && last_was_backslash {
                 current_hex = Some(Vec::new());
+                output.push(*c);
             } else if let Some(value) = &mut current_hex {
                 value.push(*c);
                 let as_string = std::str::from_utf8(value);
@@ -176,12 +178,13 @@ fn echo(context: &mut CommandContext) -> Result<CommandResult> {
                 } else if as_string.unwrap().len() >= 2 {
                     let parsed = u8::from_str_radix(as_string.unwrap(), 16);
                     if let Ok(parsed) = parsed {
+                        // if it is valid hex, write it, and remove last 2 chars of output to get rid of the "\x"
+                        output.pop();
+                        output.pop();
                         output.push(parsed);
                         current_hex = None;
                     } else {
                         // if the submitted hex isnt valid hex, write it as text instead
-                        output.push(b'\\');
-                        output.push(b'x');
                         output.append(value);
                         current_hex = None;
                     }

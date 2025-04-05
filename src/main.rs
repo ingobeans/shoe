@@ -41,44 +41,72 @@ fn parse_text_to_tokens(text: &str, include_seperators: bool) -> VecDeque<Token>
         text: String::new(),
         ty: TokenType::RegularArg,
     });
-    let mut last_char_was_backslash = false;
+    const BACKSLASH_ESCAPABLE: &[char] = &['\\', '"', '%', ' ', ';', ',', '>', '&', '<'];
+
     let mut in_quote = false;
-    for char in text.chars() {
+    let mut environment_variable_token_parent = None;
+    let mut chars: VecDeque<char> = text.chars().collect();
+    while let Some(char) = chars.pop_front() {
         let last = tokens.back_mut().unwrap();
-
-        // set `last_char_was_backslash` to false
-        // while storing the original value in new `last_was_backslash`
-        let last_was_backslash = last_char_was_backslash;
-        last_char_was_backslash = false;
-
-        let mut text_to_add = char.to_string();
 
         match char {
             '\\' => {
-                if include_seperators || last_was_backslash {
-                    last.text.insert(last.text.len(), char);
-                }
-                last_char_was_backslash = !last_was_backslash;
-                continue;
-            }
-            '"' if in_quote || last.text.is_empty() => {
-                if !last_was_backslash {
-                    in_quote = !in_quote;
-                    if include_seperators {
+                let next = chars.pop_front();
+                if let Some(next_char) = next {
+                    if !BACKSLASH_ESCAPABLE.contains(&next_char) || include_seperators {
                         last.text.insert(last.text.len(), char);
                     }
-                    if in_quote {
-                        last.ty = TokenType::QuotesArg;
-                    } else {
-                        tokens.push_back(Token {
-                            text: String::new(),
-                            ty: TokenType::RegularArg,
-                        });
-                    }
+                    last.text.insert(last.text.len(), next_char);
                     continue;
                 }
             }
-            ' ' if !in_quote => {
+            '"' if in_quote || last.text.is_empty() => {
+                in_quote = !in_quote;
+                if include_seperators {
+                    last.text.insert(last.text.len(), char);
+                }
+                if in_quote {
+                    last.ty = TokenType::QuotesArg;
+                } else {
+                    tokens.push_back(Token {
+                        text: String::new(),
+                        ty: TokenType::RegularArg,
+                    });
+                }
+                continue;
+            }
+            '%' => {
+                if let Some(parent) = environment_variable_token_parent {
+                    if include_seperators {
+                        last.text.insert(last.text.len(), char);
+                    }
+                    tokens.push_back(Token {
+                        text: String::new(),
+                        ty: parent,
+                    });
+                    environment_variable_token_parent = None;
+                    continue;
+                }
+                environment_variable_token_parent = Some(last.ty.clone());
+                if last.text.is_empty() && false {
+                    last.ty = TokenType::EnvironmentVariable;
+                    if include_seperators {
+                        last.text = String::from(char);
+                    }
+                } else {
+                    let text = if include_seperators {
+                        String::from(char)
+                    } else {
+                        String::new()
+                    };
+                    tokens.push_back(Token {
+                        text,
+                        ty: TokenType::EnvironmentVariable,
+                    });
+                }
+                continue;
+            }
+            ' ' if !in_quote && environment_variable_token_parent.is_none() => {
                 if include_seperators {
                     last.text.insert(last.text.len(), char);
                 }
@@ -89,36 +117,27 @@ fn parse_text_to_tokens(text: &str, include_seperators: bool) -> VecDeque<Token>
                 continue;
             }
             ';' | '|' | '>' | '&' | '<' if !in_quote => {
-                if !last_was_backslash {
-                    if !matches!(last.ty, TokenType::Special) && !last.text.is_empty() {
-                        tokens.push_back(Token {
-                            text: String::from(char),
-                            ty: TokenType::Special,
-                        });
-                        continue;
-                    }
-                    last.ty = TokenType::Special;
-                    last.text.insert(last.text.len(), char);
+                if !matches!(last.ty, TokenType::Special) && !last.text.is_empty() {
+                    tokens.push_back(Token {
+                        text: String::from(char),
+                        ty: TokenType::Special,
+                    });
                     continue;
                 }
+                last.ty = TokenType::Special;
+                last.text.insert(last.text.len(), char);
+                continue;
             }
-            _ => {
-                if last_was_backslash {
-                    if include_seperators {
-                        last.text.pop();
-                    }
-                    text_to_add = '\\'.to_string() + &text_to_add;
-                }
-            }
+            _ => {}
         }
         if let TokenType::Special = last.ty {
             tokens.push_back(Token {
-                text: text_to_add,
+                text: String::from(char),
                 ty: TokenType::RegularArg,
             });
             continue;
         }
-        last.text += &text_to_add;
+        last.text.insert(last.text.len(), char);
     }
     // make first non empty regular arg after each seperator a keyword
     let mut make_keyword = true;
@@ -194,10 +213,41 @@ where
         std::fs::write(path, file_contents)
     }
 }
-fn remove_empty_tokens(tokens: VecDeque<Token>) -> VecDeque<Token> {
-    let mut new = VecDeque::new();
-    for token in tokens {
-        if token.text.trim().is_empty() && !matches!(token.ty, TokenType::QuotesArg) {
+
+fn filter_tokens_and_parse_vars(
+    tokens: VecDeque<Token>,
+    env_vars: &HashMap<String, String>,
+) -> VecDeque<Token> {
+    let mut new: VecDeque<Token> = VecDeque::new();
+
+    let mut join = false;
+    let mut last_was_empty = false;
+
+    for mut token in tokens {
+        if let TokenType::EnvironmentVariable = token.ty.clone() {
+            token.text = env_vars
+                .get(&token.text.to_lowercase())
+                .map_or(String::new(), |f| f.to_owned());
+            if last_was_empty {
+                new.push_back(Token {
+                    text: String::new(),
+                    ty: TokenType::RegularArg,
+                });
+            }
+            if token.text.trim().is_empty() && !matches!(token.ty, TokenType::QuotesArg) {}
+            new.back_mut().unwrap().text += &token.text;
+            join = true;
+            continue;
+        }
+
+        last_was_empty = token.text.trim().is_empty();
+        if last_was_empty && !matches!(token.ty, TokenType::QuotesArg) {
+            join = false;
+            continue;
+        }
+        if join {
+            new.back_mut().unwrap().text += &token.text;
+            join = false;
         } else {
             new.push_back(token);
         }
@@ -428,6 +478,7 @@ struct Shoe<'a> {
     history_path: Option<String>,
     history: Vec<String>,
     history_index: usize,
+    env_vars: HashMap<String, String>,
     path_items: HashMap<String, PathBuf>,
     path_executables: Vec<String>,
     path_extensions: Vec<String>,
@@ -490,10 +541,15 @@ impl Shoe<'_> {
 
         let path_executables = path_item_names;
 
+        let env_vars = env::vars()
+            .map(|(k, v)| (k.to_lowercase(), v))
+            .collect::<HashMap<String, String>>();
+
         Shoe {
             history_path,
             history,
             history_index,
+            env_vars,
             path_items,
             path_executables,
             path_extensions,
@@ -941,6 +997,7 @@ impl Shoe<'_> {
                         Color::White
                     }
                 }
+                TokenType::EnvironmentVariable => self.theme.primary_color,
                 TokenType::Special => self.theme.secondary_color,
             };
             queue!(stdout(), SetForegroundColor(color))?;
@@ -1108,7 +1165,8 @@ impl Shoe<'_> {
 
         self.history_index = self.history.len();
 
-        let mut tokens = remove_empty_tokens(parse_text_to_tokens(command, false));
+        let mut tokens =
+            filter_tokens_and_parse_vars(parse_text_to_tokens(command, false), &self.env_vars);
 
         // check if input may be math expression, if so, evaluate it
         let eval_result = meval::eval_str(&command);
@@ -1213,15 +1271,23 @@ impl Shoe<'_> {
     }
 }
 
+#[derive(Clone, Debug)]
 enum TokenType {
     Keyword,
     QuotesArg,
     RegularArg,
     Special,
+    EnvironmentVariable,
 }
 struct Token {
     text: String,
     ty: TokenType,
+}
+
+impl std::fmt::Debug for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self.ty)
+    }
 }
 
 fn main() {
