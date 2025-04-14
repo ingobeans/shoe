@@ -1112,6 +1112,9 @@ impl Shoe<'_> {
                     command.args.push_back(&token.text);
                 }
             } else {
+                if let TokenType::Special = token.ty {
+                    continue;
+                }
                 current_command = Some(Command {
                     keyword: token.text.clone(),
                     args: VecDeque::new(),
