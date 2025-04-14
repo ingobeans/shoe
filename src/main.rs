@@ -1193,7 +1193,7 @@ impl Shoe<'_> {
         }
 
         if let Some(err) = err {
-            let _ = queue!(stdout(), SetForegroundColor(self.theme.err_color));
+            queue!(stdout(), SetForegroundColor(self.theme.err_color))?;
             println!("{}", err);
         }
 
