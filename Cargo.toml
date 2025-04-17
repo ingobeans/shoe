@@ -1,6 +1,6 @@
 [package]
 name = "shoe"
-version = "0.8.23"
+version = "0.8.25"
 edition = "2021"
 
 [dependencies]

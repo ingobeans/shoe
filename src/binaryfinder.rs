@@ -31,7 +31,7 @@ pub fn get_path_variants(path: &str, path_extensions: &Vec<String>) -> Vec<Strin
 
         variants.push(path.to_string());
         for extension in path_extensions {
-            variants.push(path.to_string() + &extension);
+            variants.push(path.to_string() + extension);
         }
         variants
     }
@@ -54,9 +54,7 @@ pub fn get_items_in_path() -> HashMap<String, PathBuf> {
                     .to_lowercase();
 
                 let full_path: PathBuf = item.join(&name);
-                if !items.contains_key(&name) {
-                    items.insert(name, full_path);
-                }
+                items.entry(name).or_insert(full_path);
             }
         }
     }

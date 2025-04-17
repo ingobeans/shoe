@@ -9,6 +9,7 @@ use crossterm::{
 };
 use relative_path::RelativePathBuf;
 use std::{
+	fmt,
     collections::{HashMap, VecDeque},
     env,
     io::{stdout, Read, Result, Write},
@@ -88,22 +89,17 @@ fn parse_text_to_tokens(text: &str, include_seperators: bool) -> VecDeque<Token>
                     continue;
                 }
                 environment_variable_token_parent = Some(last.ty.clone());
-                if last.text.is_empty() && false {
-                    last.ty = TokenType::EnvironmentVariable;
-                    if include_seperators {
-                        last.text = String::from(char);
-                    }
+                
+                let text = if include_seperators {
+                    String::from(char)
                 } else {
-                    let text = if include_seperators {
-                        String::from(char)
-                    } else {
-                        String::new()
-                    };
-                    tokens.push_back(Token {
-                        text,
-                        ty: TokenType::EnvironmentVariable,
-                    });
-                }
+                    String::new()
+                };
+                tokens.push_back(Token {
+                    text,
+                    ty: TokenType::EnvironmentVariable,
+                });
+                
                 continue;
             }
             ' ' if !in_quote && environment_variable_token_parent.is_none() => {
@@ -229,7 +225,7 @@ fn filter_tokens_and_parse_vars(tokens: VecDeque<Token>) -> VecDeque<Token> {
                     ty: TokenType::RegularArg,
                 });
             }
-            if token.text.trim().is_empty() && !matches!(token.ty, TokenType::QuotesArg) {}
+            
             new.back_mut().unwrap().text += &token.text;
             join = true;
             continue;
@@ -313,16 +309,16 @@ enum AbsoluteOrRelativePathBuf {
     Relative(RelativePathBuf),
     Absolute(PathBuf),
 }
-impl AbsoluteOrRelativePathBuf {
-    fn to_string(&self) -> String {
-        match self {
+impl fmt::Display for AbsoluteOrRelativePathBuf {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f,"{}",match self {
             AbsoluteOrRelativePathBuf::Relative(pathbuf) => pathbuf.to_string(),
             AbsoluteOrRelativePathBuf::Absolute(pathbuf) => absolute_pathbuf_to_string(pathbuf),
-        }
+        })
     }
 }
 
-fn absolute_pathbuf_to_string(input: &PathBuf) -> String {
+fn absolute_pathbuf_to_string(input: &Path) -> String {
     let mut parts: Vec<String> = vec![];
 
 	// on linux add / to beginning of path by adding an empty part
@@ -414,7 +410,7 @@ fn autocomplete_path(current_word: &String, mut item_index: usize) -> Option<Str
             text += "/";
         }
         if current_word.starts_with("~/") {
-            text = "~/".to_string() + &text.trim_start_matches('/');
+            text = "~/".to_string() + text.trim_start_matches('/');
         }
         Some(text)
     } else {
@@ -537,7 +533,7 @@ impl Shoe<'_> {
             .collect::<Vec<String>>();
 
         // sort the executables by length
-        path_item_names.sort_by(|a, b| a.len().cmp(&b.len()));
+        path_item_names.sort_by_key(|a| a.len());
 
         let path_executables = path_item_names;
 
@@ -568,7 +564,7 @@ impl Shoe<'_> {
         // replace the user home path with a tilde
 
         // first get the home path
-        let home_path = absolute_pathbuf_to_string(&shellexpand::tilde("~").to_string().into());
+        let home_path = absolute_pathbuf_to_string(&PathBuf::from(shellexpand::tilde("~").to_string()));
 
         // if on windows, replace case insensitive
         // otherwise, regular replace
@@ -638,7 +634,7 @@ impl Shoe<'_> {
                 args: &command.args,
                 theme: self.theme,
                 stdout: &mut output_buf,
-                stdin: stdin_data.clone().unwrap_or(Vec::new()),
+                stdin: stdin_data.clone().unwrap_or_default(),
             };
             let result = commands::execute_command(&command.keyword, &mut context);
             let mut not_a_builtin_command = false;
@@ -765,7 +761,7 @@ impl Shoe<'_> {
                     // check the position of the cursor after command was run, if not at beginning of line, print new line
                     let (cursor_x, _) = crossterm::cursor::position()?;
                     if cursor_x != 0 {
-                        println!("");
+                        println!();
                     }
                 }
             }
@@ -1166,7 +1162,7 @@ impl Shoe<'_> {
         let mut tokens = filter_tokens_and_parse_vars(parse_text_to_tokens(command, false));
 
         // check if input may be math expression, if so, evaluate it
-        let eval_result = meval::eval_str(&command);
+        let eval_result = meval::eval_str(command);
         if let Ok(eval) = eval_result {
             queue!(stdout(), SetForegroundColor(Color::Reset))?;
             println!("{}", eval);

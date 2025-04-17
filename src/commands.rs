@@ -137,7 +137,7 @@ fn copy(context: &mut CommandContext) -> Result<CommandResult> {
                 return Err(std::io::Error::other("Couldn't access clipboard"));
             };
             // write to clipboard context and handle error if it arises
-            if let Err(_) = ctx.set_contents(text.to_string()) {
+            if ctx.set_contents(text.to_string()).is_err() {
                 return Err(std::io::Error::other("Couldn't write to clipboard"));
             }
             Ok(CommandResult::Lovely)
@@ -197,7 +197,7 @@ fn echo(context: &mut CommandContext) -> Result<CommandResult> {
 
         context.stdout.append(&mut output);
         if newline {
-            write!(context.stdout, "\n")?;
+            writeln!(context.stdout)?;
         }
     }
     Ok(CommandResult::Lovely)
@@ -341,11 +341,10 @@ fn theme(context: &mut CommandContext) -> Result<CommandResult> {
         Err(std::io::Error::other(message))
     }
 }
+type CommandHashmap = HashMap<&'static str, &'static dyn Fn(&mut CommandContext) -> Result<CommandResult>>;
 
-pub fn get_commands(
-) -> HashMap<&'static str, &'static dyn Fn(&mut CommandContext) -> Result<CommandResult>> {
-    let mut commands: HashMap<&str, &dyn Fn(&mut CommandContext) -> Result<CommandResult>> =
-        HashMap::new();
+pub fn get_commands() -> CommandHashmap {
+	let mut commands: CommandHashmap = HashMap::new();
 
     // add commands
     commands.insert("ls", &ls);
