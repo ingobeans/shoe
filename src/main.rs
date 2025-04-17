@@ -324,6 +324,12 @@ impl AbsoluteOrRelativePathBuf {
 
 fn absolute_pathbuf_to_string(input: &PathBuf) -> String {
     let mut parts: Vec<String> = vec![];
+
+	// on linux add / to beginning of path by adding an empty part
+	if env::consts::OS != "windows" {
+		parts.push(String::new());
+	}
+    
     for component in input.components() {
         match component {
             std::path::Component::Normal(path) => {
