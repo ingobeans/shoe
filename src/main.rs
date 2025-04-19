@@ -9,9 +9,8 @@ use crossterm::{
 };
 use relative_path::RelativePathBuf;
 use std::{
-	fmt,
     collections::{HashMap, VecDeque},
-    env,
+    env, fmt,
     io::{stdout, Read, Result, Write},
     path::{Path, PathBuf},
     process::{self, Stdio},
@@ -89,7 +88,7 @@ fn parse_text_to_tokens(text: &str, include_seperators: bool) -> VecDeque<Token>
                     continue;
                 }
                 environment_variable_token_parent = Some(last.ty.clone());
-                
+
                 let text = if include_seperators {
                     String::from(char)
                 } else {
@@ -99,7 +98,7 @@ fn parse_text_to_tokens(text: &str, include_seperators: bool) -> VecDeque<Token>
                     text,
                     ty: TokenType::EnvironmentVariable,
                 });
-                
+
                 continue;
             }
             ' ' if !in_quote && environment_variable_token_parent.is_none() => {
@@ -225,7 +224,7 @@ fn filter_tokens_and_parse_vars(tokens: VecDeque<Token>) -> VecDeque<Token> {
                     ty: TokenType::RegularArg,
                 });
             }
-            
+
             new.back_mut().unwrap().text += &token.text;
             join = true;
             continue;
@@ -311,21 +310,25 @@ enum AbsoluteOrRelativePathBuf {
 }
 impl fmt::Display for AbsoluteOrRelativePathBuf {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f,"{}",match self {
-            AbsoluteOrRelativePathBuf::Relative(pathbuf) => pathbuf.to_string(),
-            AbsoluteOrRelativePathBuf::Absolute(pathbuf) => absolute_pathbuf_to_string(pathbuf),
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                AbsoluteOrRelativePathBuf::Relative(pathbuf) => pathbuf.to_string(),
+                AbsoluteOrRelativePathBuf::Absolute(pathbuf) => absolute_pathbuf_to_string(pathbuf),
+            }
+        )
     }
 }
 
 fn absolute_pathbuf_to_string(input: &Path) -> String {
     let mut parts: Vec<String> = vec![];
 
-	// on linux add / to beginning of path by adding an empty part
-	if env::consts::OS != "windows" {
-		parts.push(String::new());
-	}
-    
+    // on linux add / to beginning of path by adding an empty part
+    if env::consts::OS != "windows" {
+        parts.push(String::new());
+    }
+
     for component in input.components() {
         match component {
             std::path::Component::Normal(path) => {
@@ -471,14 +474,14 @@ struct Command<'a> {
     input_modifier: CommandInputModifier,
     run_condition: RunCondition,
 }
-struct Shoe<'a> {
+struct Shoe {
     history_path: Option<String>,
     history: Vec<String>,
     history_index: usize,
     path_items: HashMap<String, PathBuf>,
     path_executables: Vec<String>,
     path_extensions: Vec<String>,
-    theme: &'a Theme<'a>,
+    theme: &'static Theme,
     running: bool,
     listening: bool,
     use_suggestions: bool,
@@ -489,7 +492,7 @@ struct Shoe<'a> {
     last_input_before_autocomplete: Option<String>,
 }
 
-impl Shoe<'_> {
+impl Shoe {
     fn new(history_path: Option<String>) -> Self {
         let history: Vec<String>;
         if let Some(history_path) = &history_path {
@@ -564,7 +567,8 @@ impl Shoe<'_> {
         // replace the user home path with a tilde
 
         // first get the home path
-        let home_path = absolute_pathbuf_to_string(&PathBuf::from(shellexpand::tilde("~").to_string()));
+        let home_path =
+            absolute_pathbuf_to_string(&PathBuf::from(shellexpand::tilde("~").to_string()));
 
         // if on windows, replace case insensitive
         // otherwise, regular replace

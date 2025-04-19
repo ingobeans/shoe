@@ -9,8 +9,8 @@ pub static HELP_MESSAGE: &str = "
 -c            - run all args passed afterwards as a command, then exit
 -k            - run all args passed afterwards as a command";
 
-pub struct Theme<'a> {
-    pub name: &'a str,
+pub struct Theme {
+    pub name: &'static str,
     pub primary_color: Color,
     pub secondary_color: Color,
     pub err_color: Color,

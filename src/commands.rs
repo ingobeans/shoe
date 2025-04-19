@@ -341,10 +341,11 @@ fn theme(context: &mut CommandContext) -> Result<CommandResult> {
         Err(std::io::Error::other(message))
     }
 }
-type CommandHashmap = HashMap<&'static str, &'static dyn Fn(&mut CommandContext) -> Result<CommandResult>>;
+type CommandHashmap =
+    HashMap<&'static str, &'static dyn Fn(&mut CommandContext) -> Result<CommandResult>>;
 
 pub fn get_commands() -> CommandHashmap {
-	let mut commands: CommandHashmap = HashMap::new();
+    let mut commands: CommandHashmap = HashMap::new();
 
     // add commands
     commands.insert("ls", &ls);
@@ -376,7 +377,7 @@ pub fn execute_command(keyword: &str, context: &mut CommandContext) -> Result<Co
 
 pub struct CommandContext<'a> {
     pub args: &'a VecDeque<&'a str>,
-    pub theme: &'a Theme<'a>,
+    pub theme: &'static Theme,
     pub stdout: &'a mut Vec<u8>,
     pub stdin: Vec<u8>,
 }
