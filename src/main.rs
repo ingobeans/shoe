@@ -15,7 +15,8 @@ use std::{
     path::{Path, PathBuf},
     process::{self, Stdio},
 };
-use utils::{Theme, THEMES};
+#[allow(unused)]
+use utils::{Theme, DEBUG_THEME, THEMES};
 mod binaryfinder;
 mod commands;
 mod utils;
@@ -540,6 +541,16 @@ impl Shoe {
 
         let path_executables = path_item_names;
 
+        let theme;
+        #[cfg(debug_assertions)]
+        {
+            theme = &DEBUG_THEME;
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            theme = &THEMES[0];
+        }
+
         Shoe {
             history_path,
             history,
@@ -547,7 +558,7 @@ impl Shoe {
             path_items,
             path_executables,
             path_extensions,
-            theme: &THEMES[0],
+            theme,
             running: false,
             listening: false,
             use_suggestions: true,
@@ -652,8 +663,12 @@ impl Shoe {
                             self.running = false;
                             return Ok(());
                         }
+                        #[allow(unused)]
                         commands::CommandResult::UpdateTheme(new_index) => {
-                            self.theme = &THEMES[new_index];
+                            #[cfg(not(debug_assertions))]
+                            {
+                                self.theme = &THEMES[new_index];
+                            }
                         }
                         commands::CommandResult::Lovely => {
                             let output_utf8 = String::from_utf8_lossy(&output_buf);

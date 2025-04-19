@@ -54,3 +54,10 @@ pub static THEMES: &[Theme] = &[
         err_color: DEFAULT_ERR_COLOR,
     },
 ];
+
+pub static DEBUG_THEME: Theme = Theme {
+    name: "debug",
+    primary_color: hex_to_color(0xb2deff),
+    secondary_color: hex_to_color(0xffd68f),
+    err_color: DEFAULT_ERR_COLOR,
+};
