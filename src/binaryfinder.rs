@@ -1,6 +1,9 @@
-use std::{collections::HashMap, env, io::Result, path::PathBuf};
+//! Module for finding an executable from its name, sort of like the `which` command
+//!
+//! Searches an input as both a path and in PATH
 
 use relative_path::RelativePathBuf;
+use std::{collections::HashMap, env, io::Result, path::PathBuf};
 
 pub fn get_script_runtime(script_extension: &str) -> Option<&str> {
     Some(match script_extension {

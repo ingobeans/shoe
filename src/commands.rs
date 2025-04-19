@@ -1,3 +1,5 @@
+//! Handles builtin commands
+
 use std::{
     collections::{HashMap, VecDeque},
     fs,
@@ -17,6 +19,9 @@ use crate::{
     utils::{Theme, THEMES},
 };
 
+/// Matches a string pattern with wildcards against a set of entries.
+///
+/// I.e. with the entries `["hello world", "cool world", "wahoo"]`, and the pattern `* world`, would yield `["hello world", "cool world"]`
 fn match_pattern(entries: &[String], pattern: &str) -> Vec<String> {
     if let Some(split) = pattern.split_once("*") {
         let (startswith, endswith) = split;
@@ -36,6 +41,7 @@ fn match_pattern(entries: &[String], pattern: &str) -> Vec<String> {
     }
 }
 
+/// Matches a string pattern with wildcards against items in the current working directory
 fn match_file_pattern(pattern: &str) -> Result<(Vec<String>, PathBuf)> {
     let source = pattern;
     let source_pathbuf: PathBuf = source.into();
@@ -344,6 +350,7 @@ fn theme(context: &mut CommandContext) -> Result<CommandResult> {
 type CommandHashmap =
     HashMap<&'static str, &'static dyn Fn(&mut CommandContext) -> Result<CommandResult>>;
 
+/// Return a hashmap of all commands
 pub fn get_commands() -> CommandHashmap {
     let mut commands: CommandHashmap = HashMap::new();
 
@@ -367,6 +374,11 @@ pub fn get_commands() -> CommandHashmap {
     commands
 }
 
+/// Try to execute a builtin command
+///
+/// Returns a [Result] holding a [CommandResult].
+///
+/// If the command doesn't exist, the function will return `Ok(CommandResult::NotACommand)`
 pub fn execute_command(keyword: &str, context: &mut CommandContext) -> Result<CommandResult> {
     if let Some(function) = get_commands().get(keyword) {
         function(context)
@@ -375,6 +387,7 @@ pub fn execute_command(keyword: &str, context: &mut CommandContext) -> Result<Co
     }
 }
 
+/// Context passed to builtin commands
 pub struct CommandContext<'a> {
     pub args: &'a VecDeque<&'a str>,
     pub theme: &'static Theme,
@@ -382,13 +395,21 @@ pub struct CommandContext<'a> {
     pub stdin: Vec<u8>,
 }
 
+/// Result from a builtin command
+///
+/// Can report actions to execute, such as updating the theme or exiting
 pub enum CommandResult {
+    /// Default/OK state, means command executed sucessfully and nothing needs to be done
     Lovely,
+    /// Means the command was `exit` and the shell should close
     Exit,
+    /// The command requests to update the theme. The usize is the theme index
     UpdateTheme(usize),
+    /// Input was not a builtin command
     NotACommand,
 }
 
+/// Recursively copy a directory
 fn copy_dir(source: impl AsRef<Path>, dest: impl AsRef<Path>) -> std::io::Result<()> {
     fs::create_dir_all(&dest)?;
     for item in fs::read_dir(source)?.flatten() {

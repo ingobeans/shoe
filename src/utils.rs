@@ -1,3 +1,5 @@
+//! Constants and small helper functions
+
 use crossterm::style::Color;
 
 pub static DEFAULT_ERR_COLOR: Color = Color::Red;
