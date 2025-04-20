@@ -1,5 +1,5 @@
 use binaryfinder::get_script_runtime;
-use commands::{get_commands, CommandContext};
+use commands::{CommandContext, COMMANDS};
 use crossterm::{
     cursor::{MoveDown, MoveRight, MoveToColumn, MoveUp},
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
@@ -433,7 +433,7 @@ fn autocomplete_keyword(
         return autocompleted_path;
     }
     // look through built in commands for a match
-    for key in get_commands().keys() {
+    for (key, _) in COMMANDS {
         if key.starts_with(current_word) {
             return Some(key.to_string());
         }

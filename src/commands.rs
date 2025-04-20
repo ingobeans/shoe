@@ -1,7 +1,7 @@
 //! Handles builtin commands
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     fs,
     io::{Read, Result, Write},
     path::{Path, PathBuf},
@@ -400,33 +400,29 @@ fn theme(context: &mut CommandContext) -> Result<CommandResult> {
         Err(std::io::Error::other(message))
     }
 }
-type CommandHashmap =
-    HashMap<&'static str, &'static dyn Fn(&mut CommandContext) -> Result<CommandResult>>;
 
-/// Return a hashmap of all commands
-pub fn get_commands() -> CommandHashmap {
-    let mut commands: CommandHashmap = HashMap::new();
+type CommandFunction = &'static dyn Fn(&mut CommandContext) -> Result<CommandResult>;
 
-    // add commands
-    commands.insert("ls", &ls);
-    commands.insert("cd", &cd);
-    commands.insert("pwd", &pwd);
-    commands.insert("echo", &echo);
-    commands.insert("column", &column);
-    commands.insert("cls", &cls);
-    commands.insert("cat", &cat);
-    commands.insert("cp", &cp);
-    commands.insert("mv", &mv);
-    commands.insert("rm", &rm);
-    commands.insert("help", &help);
-    commands.insert("mkdir", &mkdir);
-    commands.insert("theme", &theme);
-    commands.insert("copy", &copy);
-    commands.insert("exit", &|_| Ok(CommandResult::Exit));
-
-    // return
-    commands
-}
+/// Const array of all builtin functions as key value pairs of their name and function reference
+///
+/// This is so builtin functions can be searched by name
+pub const COMMANDS: &[(&str, CommandFunction)] = &[
+    ("ls", &ls),
+    ("cd", &cd),
+    ("pwd", &pwd),
+    ("echo", &echo),
+    ("column", &column),
+    ("cls", &cls),
+    ("cat", &cat),
+    ("cp", &cp),
+    ("mv", &mv),
+    ("rm", &rm),
+    ("help", &help),
+    ("mkdir", &mkdir),
+    ("theme", &theme),
+    ("copy", &copy),
+    ("exit", &|_| Ok(CommandResult::Exit)),
+];
 
 /// Try to execute a builtin command
 ///
@@ -434,11 +430,14 @@ pub fn get_commands() -> CommandHashmap {
 ///
 /// If the command doesn't exist, the function will return `Ok(CommandResult::NotACommand)`
 pub fn execute_command(keyword: &str, context: &mut CommandContext) -> Result<CommandResult> {
-    if let Some(function) = get_commands().get(keyword) {
-        function(context)
-    } else {
-        Ok(CommandResult::NotACommand)
+    // Try to find builtin command by name of keyword
+    for (name, command) in COMMANDS {
+        if *name == keyword {
+            return command(context);
+        }
     }
+    // None was found
+    Ok(CommandResult::NotACommand)
 }
 
 /// Context passed to builtin commands
