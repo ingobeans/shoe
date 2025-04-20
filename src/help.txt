@@ -2,6 +2,7 @@ ls		list files in dir
 cd		change dir
 pwd		print working dir
 echo		print text
+column		format stdin list into columns
 copy		copy stdin to clipboard
 cls		clear console
 cat		print contents of file

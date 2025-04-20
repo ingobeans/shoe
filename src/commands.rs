@@ -72,6 +72,67 @@ fn match_file_pattern(pattern: &str) -> Result<(Vec<String>, PathBuf)> {
     Ok((matches, source_parent))
 }
 
+fn insert_string(base: String, insert: String, char_position: usize) -> String {
+    let mut new = String::new();
+    let start = char_position;
+    let end = start + insert.chars().count();
+    let mut insert_chars = insert.chars();
+
+    for (index, base_char) in base.chars().enumerate() {
+        if index >= start && index < end {
+            new.insert(new.len(), insert_chars.next().unwrap());
+        } else {
+            new.insert(new.len(), base_char);
+        }
+    }
+    new
+}
+
+/// Breaks a string containing a list of items seperated by \n into columns accounting for the terminal width
+fn into_columns(input: String) -> Result<String> {
+    let (width, _) = crossterm::terminal::size()?;
+    let width = width as usize;
+
+    if !input.contains('\n') {
+        return Ok(input);
+    }
+
+    let mut lines = input.split('\n');
+
+    let mut longest_line = lines.nth(0).unwrap();
+    for line in lines {
+        if line.chars().count() > longest_line.chars().count() {
+            longest_line = line;
+        }
+    }
+    let longest_line_length = longest_line.chars().count();
+
+    let columns = (width - longest_line_length) / longest_line_length;
+    let rows = input.split('\n').count() / columns;
+
+    let base_line = " ".repeat(width);
+
+    let mut new = vec![base_line; rows];
+    for (index, line) in input.split('\n').enumerate() {
+        let column_index = index / rows;
+        let row_index = index % rows;
+        new[row_index] = insert_string(
+            new[row_index].clone(),
+            line.to_string(),
+            column_index * longest_line_length,
+        );
+    }
+
+    Ok(new.join("\n"))
+}
+
+fn column(context: &mut CommandContext) -> Result<CommandResult> {
+    let data = String::from_utf8_lossy(&context.stdin).to_string();
+    let columns = into_columns(data)?;
+    writeln!(context.stdout, "{}", columns)?;
+    Ok(CommandResult::Lovely)
+}
+
 fn ls(context: &mut CommandContext) -> Result<CommandResult> {
     let path: PathBuf = context.args.front().unwrap_or(&".").into();
 
@@ -359,6 +420,7 @@ pub fn get_commands() -> CommandHashmap {
     commands.insert("cd", &cd);
     commands.insert("pwd", &pwd);
     commands.insert("echo", &echo);
+    commands.insert("column", &column);
     commands.insert("cls", &cls);
     commands.insert("cat", &cat);
     commands.insert("cp", &cp);
