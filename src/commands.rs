@@ -80,8 +80,7 @@ fn width_of_string(input: &str) -> usize {
 
 /// Breaks a string containing a list of items seperated by \n into columns accounting for the terminal width
 fn into_columns(input: String) -> Result<String> {
-    let (width, height) = crossterm::terminal::size()?;
-    let height = height as usize;
+    let (width, _) = crossterm::terminal::size()?;
     let width = width as usize;
 
     if !input.contains('\n') {
