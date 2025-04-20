@@ -80,7 +80,8 @@ fn width_of_string(input: &str) -> usize {
 
 /// Breaks a string containing a list of items seperated by \n into columns accounting for the terminal width
 fn into_columns(input: String) -> Result<String> {
-    let (width, _) = crossterm::terminal::size()?;
+    let (width, height) = crossterm::terminal::size()?;
+    let height = height as usize;
     let width = width as usize;
 
     if !input.contains('\n') {
@@ -99,8 +100,11 @@ fn into_columns(input: String) -> Result<String> {
         }
     }
     longest_line_length += 1;
-    let columns = (width - longest_line_length) / longest_line_length;
-    let rows = input.split('\n').count() / columns;
+
+    let amount_of_items = input.split('\n').count();
+
+    let columns = width / longest_line_length;
+    let rows = (amount_of_items / columns).max(1);
 
     let mut new = vec![String::new(); rows];
     for (index, line) in input.split('\n').enumerate() {
