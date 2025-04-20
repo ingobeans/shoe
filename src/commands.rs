@@ -72,20 +72,10 @@ fn match_file_pattern(pattern: &str) -> Result<(Vec<String>, PathBuf)> {
     Ok((matches, source_parent))
 }
 
-fn insert_string(base: String, insert: String, char_position: usize) -> String {
-    let mut new = String::new();
-    let start = char_position;
-    let end = start + insert.chars().count();
-    let mut insert_chars = insert.chars();
-
-    for (index, base_char) in base.chars().enumerate() {
-        if index >= start && index < end {
-            new.insert(new.len(), insert_chars.next().unwrap());
-        } else {
-            new.insert(new.len(), base_char);
-        }
-    }
-    new
+/// Get "actual" width of a string. Counts the amount of characters, discarding invisible ansi codes.
+fn width_of_string(input: &str) -> usize {
+    let stripped = strip_ansi_escapes::strip_str(input);
+    stripped.chars().count()
 }
 
 /// Breaks a string containing a list of items seperated by \n into columns accounting for the terminal width
@@ -99,28 +89,27 @@ fn into_columns(input: String) -> Result<String> {
 
     let mut lines = input.split('\n');
 
-    let mut longest_line = lines.nth(0).unwrap();
+    let mut longest_line = lines.next().unwrap();
+    let mut longest_line_length = width_of_string(longest_line);
     for line in lines {
-        if line.chars().count() > longest_line.chars().count() {
+        let length = width_of_string(line);
+        if length > width_of_string(longest_line) {
             longest_line = line;
+            longest_line_length = length;
         }
     }
-    let longest_line_length = longest_line.chars().count();
-
+    longest_line_length += 1;
     let columns = (width - longest_line_length) / longest_line_length;
     let rows = input.split('\n').count() / columns;
 
-    let base_line = " ".repeat(width);
-
-    let mut new = vec![base_line; rows];
+    let mut new = vec![String::new(); rows];
     for (index, line) in input.split('\n').enumerate() {
         let column_index = index / rows;
         let row_index = index % rows;
-        new[row_index] = insert_string(
-            new[row_index].clone(),
-            line.to_string(),
-            column_index * longest_line_length,
-        );
+
+        let space_to_add = column_index * longest_line_length - width_of_string(&new[row_index]);
+
+        new[row_index] += &(" ".repeat(space_to_add) + line);
     }
 
     Ok(new.join("\n"))
@@ -154,15 +143,15 @@ fn ls(context: &mut CommandContext) -> Result<CommandResult> {
             dirs.push(name)
         }
     }
-    queue!(
-        context.stdout,
-        SetForegroundColor(context.theme.primary_color)
-    )?;
     for dir in dirs {
+        queue!(
+            context.stdout,
+            SetForegroundColor(context.theme.primary_color)
+        )?;
         writeln!(context.stdout, "{}", dir)?;
     }
-    queue!(context.stdout, SetForegroundColor(Color::Reset))?;
     for dir in files {
+        queue!(context.stdout, SetForegroundColor(Color::Reset))?;
         writeln!(context.stdout, "{}", dir)?;
     }
     Ok(CommandResult::Lovely)

@@ -678,7 +678,14 @@ impl Shoe {
                             }
 
                             let is_utf8 = std::str::from_utf8(&output_buf).is_ok();
-                            if is_utf8 && output_utf8.contains('\x1B') {
+
+                            // strip output_buf of ansi escape codes if it contains an ansi escape code, it is utf-8, and the output is redirected to a file
+                            if matches!(
+                                command.output_modifier,
+                                CommandOutputModifier::WriteTo(_, _)
+                            ) && is_utf8
+                                && output_utf8.contains('\x1B')
+                            {
                                 output_buf = strip_ansi_escapes::strip(output_buf);
                             }
 
