@@ -1368,7 +1368,7 @@ fn main() {
         }
         std::fs::read_to_string(&rc_path)
             .expect("Couldn't read ~/.shoerc")
-            .split('\n')
+            .lines()
             .map(str::to_string)
             .collect()
     } else {
