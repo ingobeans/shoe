@@ -427,7 +427,7 @@ fn autocomplete_keyword(
     item_index: usize,
     path_executables: &Vec<String>,
 ) -> Option<String> {
-    // first try autocompleting the input as a string
+    // first try autocompleting the input as a path
     let autocompleted_path = autocomplete_path(current_word, item_index);
     if autocompleted_path.is_some() {
         return autocompleted_path;
