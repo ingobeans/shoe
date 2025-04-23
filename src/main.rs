@@ -686,7 +686,7 @@ impl Shoe {
                             ) && is_utf8
                                 && output_utf8.contains('\x1B')
                             {
-                                output_buf = strip_ansi_escapes::strip(output_buf);
+                                output_buf = utils::strip(output_buf);
                             }
 
                             stdout_data = Some(output_buf);
@@ -755,10 +755,9 @@ impl Shoe {
                     stdout.read_to_end(&mut buf)?;
 
                     // if data is utf-8, and contains the ansi escape code char, strip ansi codes.
-                    // the `strip_ansi_escapes` crate is quite destructive and will totally screw binary data, so we only do this when we're sure it's ok
                     let is_utf8 = std::str::from_utf8(&buf).is_ok();
                     if is_utf8 && buf.contains(&b'\x1B') {
-                        buf = strip_ansi_escapes::strip(buf);
+                        buf = utils::strip(buf);
                     }
 
                     Some(buf)

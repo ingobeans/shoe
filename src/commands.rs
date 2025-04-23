@@ -16,7 +16,7 @@ use crossterm::{
 
 use crate::{
     absolute_pathbuf_to_string,
-    utils::{Theme, THEMES},
+    utils::{strip_str, Theme, THEMES},
 };
 
 /// Matches a string pattern with wildcards against a set of entries.
@@ -74,7 +74,7 @@ fn match_file_pattern(pattern: &str) -> Result<(Vec<String>, PathBuf)> {
 
 /// Get "actual" width of a string. Counts the amount of characters, discarding invisible ansi codes.
 fn width_of_string(input: &str) -> usize {
-    let stripped = strip_ansi_escapes::strip_str(input);
+    let stripped = strip_str(input);
     stripped.chars().count()
 }
 
