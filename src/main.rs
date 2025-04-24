@@ -650,6 +650,8 @@ impl Shoe {
                 theme: self.theme,
                 stdout: &mut output_buf,
                 stdin: stdin_data.clone().unwrap_or_default(),
+                path_items: &self.path_items,
+                path_extensions: &self.path_extensions,
             };
             let result = commands::execute_command(&command.keyword, &mut context);
             let mut not_a_builtin_command = false;

@@ -1,7 +1,7 @@
 //! Handles builtin commands
 
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     fs,
     io::{Read, Result, Write},
     path::{Path, PathBuf},
@@ -15,7 +15,7 @@ use crossterm::{
 };
 
 use crate::{
-    absolute_pathbuf_to_string,
+    absolute_pathbuf_to_string, binaryfinder,
     utils::{strip_str, Theme, THEMES},
 };
 
@@ -370,6 +370,15 @@ fn mkdir(context: &mut CommandContext) -> Result<CommandResult> {
     fs::create_dir_all(path)?;
     Ok(CommandResult::Lovely)
 }
+fn which(context: &mut CommandContext) -> Result<CommandResult> {
+    if context.args.len() != 1 {
+        Err(std::io::Error::other("Usage: 'which <binary>'"))?;
+    }
+    let name = context.args[0];
+    let binary = binaryfinder::find_binary(name, context.path_items, context.path_extensions)?;
+    writeln!(context.stdout, "{:?}", binary)?;
+    Ok(CommandResult::Lovely)
+}
 fn theme(context: &mut CommandContext) -> Result<CommandResult> {
     if context.args.len() != 1 {
         writeln!(context.stdout, "Usage: 'theme <theme name>'")?;
@@ -420,6 +429,7 @@ pub const COMMANDS: &[(&str, CommandFunction)] = &[
     ("help", &help),
     ("mkdir", &mkdir),
     ("theme", &theme),
+    ("which", &which),
     ("copy", &copy),
     ("exit", &|_| Ok(CommandResult::Exit)),
 ];
@@ -446,6 +456,8 @@ pub struct CommandContext<'a> {
     pub theme: &'static Theme,
     pub stdout: &'a mut Vec<u8>,
     pub stdin: Vec<u8>,
+    pub path_items: &'a HashMap<String, PathBuf>,
+    pub path_extensions: &'a Vec<String>,
 }
 
 /// Result from a builtin command
