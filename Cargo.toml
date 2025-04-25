@@ -1,14 +1,13 @@
 [package]
 name = "shoe"
-version = "0.8.37"
+version = "0.8.38"
 edition = "2021"
 
 [dependencies]
 copypasta = "0.10.1"
 crossterm = "0.29.0"
 ctrlc = "3.4.6"
-lazy_static = "1.5.0"
 meval = { git = "https://github.com/Titaniumtown/meval-rs.git" }
-regex = "1.11.1"
 relative-path = "1.9.3"
 shellexpand = "3.1.0"
+strip-ansi-escapes = "0.2.1"
