@@ -376,7 +376,7 @@ fn which(context: &mut CommandContext) -> Result<CommandResult> {
     }
     let name = context.args[0];
     let binary = binaryfinder::find_binary(name, context.path_items, context.path_extensions)?;
-    writeln!(context.stdout, "{:?}", binary)?;
+    writeln!(context.stdout, "{}", binary.to_string_lossy())?;
     Ok(CommandResult::Lovely)
 }
 fn theme(context: &mut CommandContext) -> Result<CommandResult> {
