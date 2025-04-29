@@ -35,10 +35,10 @@ pub fn get_path_variants(path: &str, path_extensions: &Vec<String>) -> Vec<Strin
     } else {
         let mut variants = Vec::new();
 
-        variants.push(path.to_string());
         for extension in path_extensions {
             variants.push(path.to_string() + extension);
         }
+        variants.push(path.to_string());
         variants
     }
 }
