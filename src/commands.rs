@@ -102,7 +102,7 @@ fn into_columns(input: String) -> Result<String> {
 
     let amount_of_items = input.split('\n').count();
 
-    let columns = width / longest_line_length;
+    let columns = (width / longest_line_length).max(1);
     let rows = (amount_of_items / columns).max(1);
 
     let mut new = vec![String::new(); rows];
