@@ -351,6 +351,9 @@ fn rm(context: &mut CommandContext) -> Result<CommandResult> {
         Err(std::io::Error::other("Usage: 'rm <target>'"))?;
     }
     let (matches, source_parent) = match_file_pattern(context.args[0])?;
+    if matches.len() == 0 {
+        Err(std::io::Error::other("No item by name/pattern found"))?;
+    }
     for name in matches {
         let pathbuf = source_parent.join(name);
         let target_is_file = pathbuf.is_file();
