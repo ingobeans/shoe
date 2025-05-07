@@ -1118,6 +1118,10 @@ impl Shoe {
                             command.output_modifier = CommandOutputModifier::Piped;
                         }
                         ">" => {
+                            if index >= tokens.len() {
+                                let message = format!("no target for '{}'", token.text);
+                                return Err(std::io::Error::other(message));
+                            }
                             command.output_modifier =
                                 CommandOutputModifier::WriteTo(tokens[index].text.clone(), false);
                             index += 1;
