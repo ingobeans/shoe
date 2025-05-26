@@ -11,7 +11,7 @@ use relative_path::RelativePathBuf;
 use std::{
     collections::{HashMap, VecDeque},
     env, fmt,
-    io::{stdout, Read, Result, Write},
+    io::{self, stdout, Read, Write},
     path::{Path, PathBuf},
     process::{self, Stdio},
 };
@@ -21,6 +21,38 @@ mod binaryfinder;
 mod commands;
 mod utils;
 
+fn count_occurence_in_string(text: &str, c: char) -> usize {
+    let mut count = 0;
+    for char in text.chars() {
+        if char == c {
+            count += 1;
+        }
+    }
+    count
+}
+
+fn try_eval(text: &str) -> Result<f64, meval::Error> {
+    let result = meval::eval_str(text);
+    if result.is_ok() {
+        return result;
+    }
+    // if the text fails to eval as math expression, try adding extra closing parenthesis,
+    // such that 4*(3+5
+    // will be a valid math expression.
+    let opening_parenthesis_count = count_occurence_in_string(text, '(');
+    let closing_parenthesis_count = count_occurence_in_string(text, ')');
+
+    // return failure if there are more closing parenthesis or equal as opening
+    // since it would mean adding 0 or negative amount of closing parenthesis
+    if closing_parenthesis_count >= opening_parenthesis_count {
+        return result;
+    }
+
+    let closing_parenthesis_to_add = opening_parenthesis_count - closing_parenthesis_count;
+    let new_text = text.to_string() + &(")".repeat(closing_parenthesis_to_add));
+    meval::eval_str(new_text)
+}
+
 /// Function parse line to arguments, with support for quote enclosures
 ///
 /// Include seperators will ensure no character of text is lost
@@ -29,7 +61,7 @@ fn parse_text_to_tokens(text: &str, include_seperators: bool) -> VecDeque<Token>
     // too much logic
     let mut tokens = VecDeque::new();
     // if input is simply a math expression, return it
-    let eval_result = meval::eval_str(text);
+    let eval_result = try_eval(text);
     if eval_result.is_ok() {
         tokens.push_back(Token {
             text: text.to_string(),
@@ -155,7 +187,7 @@ fn parse_text_to_tokens(text: &str, include_seperators: bool) -> VecDeque<Token>
     tokens
 }
 
-fn move_cursor_to_cursor_pos(original_x: usize, pos: usize, width: usize) -> Result<()> {
+fn move_cursor_to_cursor_pos(original_x: usize, pos: usize, width: usize) -> io::Result<()> {
     let new_x = (original_x + pos) % width;
     let rows = (original_x + pos) / width;
     if rows > 0 {
@@ -166,7 +198,7 @@ fn move_cursor_to_cursor_pos(original_x: usize, pos: usize, width: usize) -> Res
     Ok(())
 }
 
-fn move_back_to(original_x: usize, steps: usize, width: usize) -> Result<()> {
+fn move_back_to(original_x: usize, steps: usize, width: usize) -> io::Result<()> {
     let rows = (original_x + steps) / width;
     if rows > 0 {
         queue!(stdout(), MoveUp(rows as u16))?;
@@ -175,7 +207,7 @@ fn move_back_to(original_x: usize, steps: usize, width: usize) -> Result<()> {
     Ok(())
 }
 
-fn write_file<P, C>(path: P, contents: C, append: bool) -> std::io::Result<()>
+fn write_file<P, C>(path: P, contents: C, append: bool) -> io::Result<()>
 where
     P: AsRef<Path>,
     C: AsRef<[u8]> + Into<Vec<u8>>,
@@ -291,7 +323,7 @@ fn replace_case_insensitive(source: String, pattern: String, replace: String) ->
     }
 }
 
-fn list_dir(dir: &Path) -> Result<Vec<(bool, String)>> {
+fn list_dir(dir: &Path) -> io::Result<Vec<(bool, String)>> {
     let contents = std::fs::read_dir(dir)?;
     let contents = contents
         .flatten()
@@ -570,7 +602,7 @@ impl Shoe {
         }
     }
     /// Convert cwd to a string, also replacing home path with ~
-    fn cwd_to_str(&self) -> Result<String> {
+    fn cwd_to_str(&self) -> io::Result<String> {
         let path = std::env::current_dir()?;
 
         let path_string = absolute_pathbuf_to_string(&path);
@@ -593,7 +625,7 @@ impl Shoe {
             Ok(path_string.replace(&home_path, "~"))
         }
     }
-    fn execute_commands(&mut self, commands: Vec<Command>) -> Result<()> {
+    fn execute_commands(&mut self, commands: Vec<Command>) -> io::Result<()> {
         // if command has output piped to the next, store the output here
         let mut last_piped_output: Option<Vec<u8>> = None;
         // if last command succeeeded
@@ -834,7 +866,7 @@ impl Shoe {
         }
         None
     }
-    fn handle_key_press(&mut self, event: Event) -> Result<()> {
+    fn handle_key_press(&mut self, event: Event) -> io::Result<()> {
         if let Event::Key(key_event) = event {
             if key_event.kind != KeyEventKind::Press {
                 return Ok(());
@@ -1002,7 +1034,7 @@ impl Shoe {
         Ok(())
     }
     /// Prints current inputted text with color highlighting
-    fn print_text(&self) -> Result<()> {
+    fn print_text(&self) -> io::Result<()> {
         let tokens = parse_text_to_tokens(&self.input_text, true);
         for token in tokens {
             let color = match token.ty {
@@ -1023,7 +1055,7 @@ impl Shoe {
         }
         Ok(())
     }
-    fn update(&self) -> Result<()> {
+    fn update(&self) -> io::Result<()> {
         queue!(stdout(), Clear(ClearType::FromCursorDown))?;
 
         self.print_text()?;
@@ -1089,7 +1121,7 @@ impl Shoe {
         }
         None
     }
-    fn tokens_to_commands_vec(tokens: &VecDeque<Token>) -> Result<Vec<Command>> {
+    fn tokens_to_commands_vec(tokens: &VecDeque<Token>) -> io::Result<Vec<Command>> {
         let mut commands: Vec<Command> = Vec::new();
         let mut current_command: Option<Command> = None;
         let mut index = 0;
@@ -1167,7 +1199,7 @@ impl Shoe {
         }
         Ok(commands)
     }
-    fn execute_command_string(&mut self, command: &String, allow_history: bool) -> Result<()> {
+    fn execute_command_string(&mut self, command: &String, allow_history: bool) -> io::Result<()> {
         if command.trim().is_empty() {
             self.history_index = self.history.len();
             return Ok(());
@@ -1193,7 +1225,7 @@ impl Shoe {
         let mut tokens = filter_tokens_and_parse_vars(parse_text_to_tokens(command, false));
 
         // check if input may be math expression, if so, evaluate it
-        let eval_result = meval::eval_str(command);
+        let eval_result = try_eval(command);
         if let Ok(eval) = eval_result {
             queue!(stdout(), SetForegroundColor(Color::Reset))?;
             println!("{}", eval);
@@ -1236,7 +1268,7 @@ impl Shoe {
         queue!(stdout(), SetForegroundColor(Color::Reset))?;
         Ok(())
     }
-    fn start(&mut self, rc: Vec<String>) -> Result<()> {
+    fn start(&mut self, rc: Vec<String>) -> io::Result<()> {
         // set window title
         queue!(stdout(), terminal::SetTitle("Shoe")).unwrap();
 
@@ -1268,7 +1300,7 @@ impl Shoe {
         }
         Ok(())
     }
-    fn listen(&mut self) -> Result<String> {
+    fn listen(&mut self) -> io::Result<String> {
         self.listening = true;
 
         queue!(stdout(), SetForegroundColor(self.theme.primary_color))?;
