@@ -191,6 +191,8 @@ fn copy(context: &mut CommandContext) -> Result<CommandResult> {
     // try decoding stdin as utf_8
     match std::str::from_utf8(&context.stdin) {
         Ok(text) => {
+            // strip ansi codes and non text chars
+            let text = strip_ansi_escapes::strip_str(text);
             // create a clipboard context
             let Ok(mut ctx) = copypasta::ClipboardContext::new() else {
                 return Err(std::io::Error::other("Couldn't access clipboard"));
