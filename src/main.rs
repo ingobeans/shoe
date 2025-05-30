@@ -7,6 +7,7 @@ use crossterm::{
     style::{Color, SetAttribute, SetForegroundColor},
     terminal::{self, disable_raw_mode, enable_raw_mode, is_raw_mode_enabled, Clear, ClearType},
 };
+use meval::ContextProvider;
 use relative_path::RelativePathBuf;
 use std::{
     collections::{HashMap, VecDeque},
@@ -32,7 +33,9 @@ fn count_occurence_in_string(text: &str, c: char) -> usize {
 }
 
 fn try_eval(text: &str) -> Result<f64, meval::Error> {
-    let result = meval::eval_str(text);
+    let mut context = meval::Context::new();
+    context.var("g", 9.82);
+    let result = meval::eval_str_with_context(text, &context);
     if result.is_ok() {
         return result;
     }
@@ -50,7 +53,7 @@ fn try_eval(text: &str) -> Result<f64, meval::Error> {
 
     let closing_parenthesis_to_add = opening_parenthesis_count - closing_parenthesis_count;
     let new_text = text.to_string() + &(")".repeat(closing_parenthesis_to_add));
-    meval::eval_str(new_text)
+    meval::eval_str_with_context(new_text, context)
 }
 
 /// Function parse line to arguments, with support for quote enclosures
