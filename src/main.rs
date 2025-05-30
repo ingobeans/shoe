@@ -7,7 +7,6 @@ use crossterm::{
     style::{Color, SetAttribute, SetForegroundColor},
     terminal::{self, disable_raw_mode, enable_raw_mode, is_raw_mode_enabled, Clear, ClearType},
 };
-use meval::ContextProvider;
 use relative_path::RelativePathBuf;
 use std::{
     collections::{HashMap, VecDeque},
@@ -34,7 +33,12 @@ fn count_occurence_in_string(text: &str, c: char) -> usize {
 
 fn try_eval(text: &str) -> Result<f64, meval::Error> {
     let mut context = meval::Context::new();
+    // gravity value
+    // i found myself using quite a lot so decided to add directly
     context.var("g", 9.82);
+    // deg var, for conversion between degrees and radians,
+    // such that sin(360*deg) is a valid expression
+    context.var("deg", std::f64::consts::PI / 180.0);
     let result = meval::eval_str_with_context(text, &context);
     if result.is_ok() {
         return result;
