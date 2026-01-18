@@ -985,10 +985,20 @@ impl Shoe {
                     self.delete_char();
                 }
                 KeyCode::Backspace => {
+                    let ctrl = key_event.modifiers.contains(KeyModifiers::CONTROL);
+                    const DELETE_BREAK_CHARS: &[char] = &[' ', '/', '.', '-'];
+                    let mut delete_until_non_break_char = ctrl
+                        && DELETE_BREAK_CHARS.contains(
+                            &self
+                                .input_text
+                                .chars()
+                                .nth(self.cursor_pos.saturating_sub(1))
+                                .unwrap_or('p'),
+                        );
+
                     // loop because ctrl+backspace will delete more than one character
                     loop {
                         if self.cursor_pos > 0 {
-                            let ctrl = key_event.modifiers.contains(KeyModifiers::CONTROL);
                             self.cursor_pos -= 1;
                             self.delete_char();
 
@@ -1002,7 +1012,12 @@ impl Shoe {
                                 .chars()
                                 .nth(self.cursor_pos.saturating_sub(1))
                                 .unwrap_or('p');
-                            if [' '].contains(&char) {
+                            let is_break_char = DELETE_BREAK_CHARS.contains(&char);
+                            if delete_until_non_break_char {
+                                if !is_break_char {
+                                    delete_until_non_break_char = false;
+                                }
+                            } else if is_break_char {
                                 break;
                             }
                         } else {
@@ -1355,6 +1370,7 @@ impl Shoe {
             if let Event::Key(key) = &mut e
                 && key.is_press()
                 && key.code.is_char('w')
+                && key.modifiers.contains(KeyModifiers::CONTROL)
             {
                 key.code = KeyCode::Backspace;
             }
