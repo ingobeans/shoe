@@ -985,9 +985,29 @@ impl Shoe {
                     self.delete_char();
                 }
                 KeyCode::Backspace => {
-                    if self.cursor_pos > 0 {
-                        self.cursor_pos -= 1;
-                        self.delete_char();
+                    // loop because ctrl+backspace will delete more than one character
+                    loop {
+                        if self.cursor_pos > 0 {
+                            let ctrl = key_event.modifiers.contains(KeyModifiers::CONTROL);
+                            self.cursor_pos -= 1;
+                            self.delete_char();
+
+                            if !ctrl {
+                                // always only delete one character if ctrl isnt pressed
+                                break;
+                            }
+                            // check if last char should stop ctrl+backspace delete
+                            let char = self
+                                .input_text
+                                .chars()
+                                .nth(self.cursor_pos.saturating_sub(1))
+                                .unwrap_or('p');
+                            if [' '].contains(&char) {
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
                     }
                 }
                 KeyCode::Up => {
