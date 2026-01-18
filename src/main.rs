@@ -1,22 +1,25 @@
 use binaryfinder::get_script_runtime;
-use commands::{CommandContext, COMMANDS};
+use commands::{COMMANDS, CommandContext};
 use crossterm::{
     cursor::{MoveDown, MoveRight, MoveToColumn, MoveUp},
-    event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
+    event::{
+        self, Event, KeyCode, KeyEventKind, KeyModifiers, KeyboardEnhancementFlags,
+        PushKeyboardEnhancementFlags,
+    },
     queue,
     style::{Color, SetAttribute, SetForegroundColor},
-    terminal::{self, disable_raw_mode, enable_raw_mode, is_raw_mode_enabled, Clear, ClearType},
+    terminal::{self, Clear, ClearType, disable_raw_mode, enable_raw_mode},
 };
 use relative_path::RelativePathBuf;
 use std::{
     collections::{HashMap, VecDeque},
     env, fmt,
-    io::{self, stdout, Read, Write},
+    io::{self, Read, Write, stdout},
     path::{Path, PathBuf},
     process::{self, Stdio},
 };
 #[allow(unused)]
-use utils::{Theme, DEBUG_THEME, THEMES};
+use utils::{DEBUG_THEME, THEMES, Theme};
 mod binaryfinder;
 mod commands;
 mod utils;
@@ -1128,7 +1131,7 @@ impl Shoe {
         }
         None
     }
-    fn tokens_to_commands_vec(tokens: &VecDeque<Token>) -> io::Result<Vec<Command>> {
+    fn tokens_to_commands_vec(tokens: &VecDeque<Token>) -> io::Result<Vec<Command<'_>>> {
         let mut commands: Vec<Command> = Vec::new();
         let mut current_command: Option<Command> = None;
         let mut index = 0;
@@ -1298,9 +1301,18 @@ impl Shoe {
         // run
         self.running = true;
         while self.running {
-            if !is_raw_mode_enabled()? {
-                enable_raw_mode()?;
-            }
+            enable_raw_mode()?;
+            let _ = queue!(
+                stdout(),
+                PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES,)
+            );
+
+            let _ = queue!(
+                stdout(),
+                PushKeyboardEnhancementFlags(
+                    KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES,
+                )
+            );
             let command = &self.listen()?;
             disable_raw_mode()?;
             self.execute_command_string(command, true)?;
@@ -1319,7 +1331,15 @@ impl Shoe {
 
         stdout().flush()?;
         while self.listening {
-            self.handle_key_press(event::read()?)?;
+            let mut e = event::read()?;
+            if let Event::Key(key) = &mut e
+                && key.is_press()
+                && key.code.is_char('w')
+            {
+                key.code = KeyCode::Backspace;
+            }
+
+            self.handle_key_press(e)?;
         }
         if self.input_text.chars().count() != 0 {
             queue!(stdout(), MoveRight(self.input_text.chars().count() as u16))?;
