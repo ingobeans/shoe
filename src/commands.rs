@@ -16,9 +16,8 @@ use crossterm::{
 
 use crate::{
     absolute_pathbuf_to_string, binaryfinder,
-    utils::{Theme, THEMES},
+    utils::{THEMES, Theme},
 };
-
 /// Matches a string pattern with wildcards against a set of entries.
 ///
 /// I.e. with the entries `["hello world", "cool world", "wahoo"]`, and the pattern `* world`, would yield `["hello world", "cool world"]`
@@ -159,6 +158,17 @@ fn ls(context: &mut CommandContext) -> Result<CommandResult> {
     }
     Ok(CommandResult::Lovely)
 }
+fn export(context: &mut CommandContext) -> Result<CommandResult> {
+    if context.args.len() != 2 {
+        Err(std::io::Error::other("Usage: 'export <key> <value>'"))?
+    }
+
+    let key = context.args[0];
+    let value = context.args[1];
+
+    Ok(CommandResult::SetEnvVar(key.to_string(), value.to_string()))
+}
+
 fn cd(context: &mut CommandContext) -> Result<CommandResult> {
     let path = context.args.front();
     if let Some(path) = path {
@@ -422,6 +432,7 @@ type CommandFunction = &'static dyn Fn(&mut CommandContext) -> Result<CommandRes
 /// This is so builtin functions can be searched by name
 pub const COMMANDS: &[(&str, CommandFunction)] = &[
     ("ls", &ls),
+    ("export", &export),
     ("cd", &cd),
     ("pwd", &pwd),
     ("echo", &echo),
@@ -477,6 +488,8 @@ pub enum CommandResult {
     UpdateTheme(usize),
     /// Input was not a builtin command
     NotACommand,
+    /// The command requests to insert an enviroment variable into the registry
+    SetEnvVar(String, String),
 }
 
 /// Recursively copy a directory
