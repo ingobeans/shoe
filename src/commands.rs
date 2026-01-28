@@ -163,12 +163,10 @@ fn export(context: &mut CommandContext) -> Result<CommandResult> {
         Err(std::io::Error::other("Usage: 'export <key> <value>'"))?
     }
 
-    let value = context.args[0];
-    let key = context.args[1];
-    unsafe {
-        std::env::set_var(key, value);
-    }
-    Ok(CommandResult::Lovely)
+    let key = context.args[0];
+    let value = context.args[1];
+
+    Ok(CommandResult::SetEnvVar(key.to_string(), value.to_string()))
 }
 
 fn cd(context: &mut CommandContext) -> Result<CommandResult> {
@@ -490,6 +488,8 @@ pub enum CommandResult {
     UpdateTheme(usize),
     /// Input was not a builtin command
     NotACommand,
+    /// The command requests to insert an enviroment variable into the registry
+    SetEnvVar(String, String),
 }
 
 /// Recursively copy a directory

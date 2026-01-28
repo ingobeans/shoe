@@ -533,6 +533,7 @@ struct Shoe {
     cursor_pos: usize,
     autocomplete_cycle_index: Option<usize>,
     last_input_before_autocomplete: Option<String>,
+    enviroment_variables: HashMap<String, String>,
 }
 
 impl Shoe {
@@ -609,6 +610,7 @@ impl Shoe {
             cursor_pos: 0,
             last_input_before_autocomplete: None,
             autocomplete_cycle_index: None,
+            enviroment_variables: HashMap::new(),
         }
     }
     /// Convert cwd to a string, also replacing home path with ~
@@ -738,6 +740,9 @@ impl Shoe {
                         commands::CommandResult::NotACommand => {
                             not_a_builtin_command = true;
                         }
+                        commands::CommandResult::SetEnvVar(key, value) => {
+                            self.enviroment_variables.insert(key, value);
+                        }
                     }
                 }
                 Err(error) => {
@@ -766,6 +771,9 @@ impl Shoe {
                 // create process, using either the found path, or, if not found, the original keyword
                 let mut process = process::Command::new(found_binary);
 
+                for (key, val) in self.enviroment_variables.iter() {
+                    process.env(key, val);
+                }
                 process.args(&command.args);
 
                 // if there's stdin data, set process' stdin to piped
