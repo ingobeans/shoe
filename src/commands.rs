@@ -2,7 +2,6 @@
 
 use std::{
     collections::{HashMap, VecDeque},
-    env::args,
     fs,
     io::{Read, Result, Write},
     path::{Path, PathBuf},
@@ -14,7 +13,6 @@ use crossterm::{
     style::{Color, SetForegroundColor},
     terminal,
 };
-use winreg::{RegKey, enums::*};
 
 use crate::{
     absolute_pathbuf_to_string, binaryfinder,
