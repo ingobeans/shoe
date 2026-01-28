@@ -11,3 +11,4 @@ meval = { git = "https://github.com/Titaniumtown/meval-rs.git" }
 relative-path = "1.9.3"
 shellexpand = "3.1.0"
 strip-ansi-escapes = "0.2.1"
+winreg = "0.55.0"
