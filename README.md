@@ -34,3 +34,9 @@ i also ensured all builtin commands are simple but powerful. an example: to copy
 - `|` - pipes the output of a command to the next's stdin
 - `\` - escapes a special character
 - `"` - you can enclose an argument in quotes
+
+# to-do
+- [ ] add shoe self update command
+- [ ] ctrl+left/right arrow for input
+- [ ] add shift selection to input
+- [ ] fix input when writing in more than two lines
