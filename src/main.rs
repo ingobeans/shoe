@@ -297,7 +297,7 @@ fn filter_tokens_and_parse_vars(mut tokens: VecDeque<Token>, aliases:&HashMap<St
 
                     // do like a .append_front() but that doesnt exist afaik.
                     // idk if there is a more efficient way of doing this :sob:
-                    for token in alias_tokens {
+                    for token in alias_tokens.into_iter().rev() {
                         tokens.push_front(token);
                     }
                 }
