@@ -158,6 +158,7 @@ fn ls(context: &mut CommandContext) -> Result<CommandResult> {
     }
     Ok(CommandResult::Lovely)
 }
+
 fn export(context: &mut CommandContext) -> Result<CommandResult> {
     if context.args.len() != 2 {
         Err(std::io::Error::other("Usage: 'export <key> <value>'"))?
@@ -167,6 +168,23 @@ fn export(context: &mut CommandContext) -> Result<CommandResult> {
     let value = context.args[1];
 
     Ok(CommandResult::SetEnvVar(key.to_string(), value.to_string()))
+}
+
+fn alias(context: &mut CommandContext) -> Result<CommandResult> {
+    if context.args.is_empty() {
+        for (k,v) in context.aliases.iter() {
+            writeln!(context.stdout, " - {k}: {v}")?;
+        }
+        return Ok(CommandResult::Lovely);
+    }
+    if context.args.len() > 2 {
+        Err(std::io::Error::other("Usage: 'alias <key> <value>', or 'alias <key>' to remove alias"))?
+    }
+
+    let key = context.args[0];
+    let value = context.args.get(1).map(|f| f.to_string()).unwrap_or(String::new());
+
+    Ok(CommandResult::SetAlias(key.to_string(), value))
 }
 
 fn cd(context: &mut CommandContext) -> Result<CommandResult> {
@@ -433,6 +451,7 @@ type CommandFunction = &'static dyn Fn(&mut CommandContext) -> Result<CommandRes
 pub const COMMANDS: &[(&str, CommandFunction)] = &[
     ("ls", &ls),
     ("export", &export),
+    ("alias", &alias),
     ("cd", &cd),
     ("pwd", &pwd),
     ("echo", &echo),
@@ -469,6 +488,7 @@ pub fn execute_command(keyword: &str, context: &mut CommandContext) -> Result<Co
 /// Context passed to builtin commands
 pub struct CommandContext<'a> {
     pub args: &'a VecDeque<&'a str>,
+    pub aliases: &'a HashMap<String,String>,
     pub theme: &'static Theme,
     pub stdout: &'a mut Vec<u8>,
     pub stdin: Vec<u8>,
@@ -490,6 +510,8 @@ pub enum CommandResult {
     NotACommand,
     /// The command requests to insert an enviroment variable into the registry
     SetEnvVar(String, String),
+    /// The command requests to add/remove an alias. Removes if value is empty
+    SetAlias(String, String),
 }
 
 /// Recursively copy a directory

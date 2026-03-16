@@ -252,13 +252,14 @@ where
     }
 }
 
-fn filter_tokens_and_parse_vars(tokens: VecDeque<Token>) -> VecDeque<Token> {
+fn filter_tokens_and_parse_vars(mut tokens: VecDeque<Token>, aliases:&HashMap<String,String>) -> VecDeque<Token> {
     let mut new: VecDeque<Token> = VecDeque::new();
 
     let mut join = false;
     let mut last_was_empty = false;
+    let mut last_was_special = false;
 
-    for mut token in tokens {
+    while let Some(mut token) = tokens.pop_front() {
         if let TokenType::EnvironmentVariable = token.ty.clone() {
             token.text = env::var(token.text).map_or(String::new(), |f| f.to_owned());
             if last_was_empty {
@@ -278,6 +279,27 @@ fn filter_tokens_and_parse_vars(tokens: VecDeque<Token>) -> VecDeque<Token> {
             join = false;
             continue;
         }
+
+        if matches!(token.ty, TokenType::Special) {
+            last_was_special = true;
+        } else {
+            if last_was_special || new.is_empty() {
+                // this is a keyword.
+                // check if alias for keyword exists.
+                // if so, parse alias tokens, and replace
+                // current token (keyword), with the first
+                // token of the alias tokens, and add the
+                // other alias tokens to the tokens vecdeque
+                // to be parsed.
+                if let Some(alias_value) = aliases.get(&token.text) {
+                    let mut alias_tokens = parse_text_to_tokens(alias_value,false);
+                    token = alias_tokens.pop_front().unwrap();
+                    tokens.extend(alias_tokens.into_iter());
+                }
+            }
+            last_was_special = false;
+        }
+
         if join {
             new.back_mut().unwrap().text += &token.text;
             join = false;
@@ -522,6 +544,7 @@ struct Shoe {
     history: Vec<String>,
     history_index: usize,
     path_items: HashMap<String, PathBuf>,
+    aliases: HashMap<String, String>,
     path_executables: Vec<String>,
     path_extensions: Vec<String>,
     theme: &'static Theme,
@@ -606,6 +629,7 @@ impl Shoe {
             listening: false,
             use_suggestions: true,
             substitute_tildes: true,
+            aliases:HashMap::new(),
             input_text: String::new(),
             cursor_pos: 0,
             last_input_before_autocomplete: None,
@@ -691,6 +715,7 @@ impl Shoe {
             let mut output_buf = Vec::new();
             let mut context = CommandContext {
                 args: &command.args,
+                aliases: &self.aliases,
                 theme: self.theme,
                 stdout: &mut output_buf,
                 stdin: stdin_data.clone().unwrap_or_default(),
@@ -742,6 +767,13 @@ impl Shoe {
                         }
                         commands::CommandResult::SetEnvVar(key, value) => {
                             self.enviroment_variables.insert(key, value);
+                        }
+                        commands::CommandResult::SetAlias(key, value) => {
+                            if value.is_empty() {
+                                self.aliases.remove(&key);
+                            } else {
+                                self.aliases.insert(key, value);
+                            }
                         }
                     }
                 }
@@ -1275,7 +1307,7 @@ impl Shoe {
 
         self.history_index = self.history.len();
 
-        let mut tokens = filter_tokens_and_parse_vars(parse_text_to_tokens(command, false));
+        let mut tokens = filter_tokens_and_parse_vars(parse_text_to_tokens(command, false), &self.aliases);
 
         // check if input may be math expression, if so, evaluate it
         let eval_result = try_eval(command);
