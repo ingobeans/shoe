@@ -294,7 +294,12 @@ fn filter_tokens_and_parse_vars(mut tokens: VecDeque<Token>, aliases:&HashMap<St
                 if let Some(alias_value) = aliases.get(&token.text) {
                     let mut alias_tokens = parse_text_to_tokens(alias_value,false);
                     token = alias_tokens.pop_front().unwrap();
-                    tokens.extend(alias_tokens.into_iter());
+
+                    // do like a .append_front() but that doesnt exist afaik.
+                    // idk if there is a more efficient way of doing this :sob:
+                    for token in alias_tokens {
+                        tokens.push_front(token);
+                    }
                 }
             }
             last_was_special = false;
