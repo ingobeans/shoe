@@ -181,12 +181,11 @@ fn parse_text_to_tokens(text: &str, include_seperators: bool) -> VecDeque<Token>
     let mut make_keyword = true;
     for token in tokens.iter_mut() {
         match token.ty {
-            TokenType::RegularArg => {
-                if make_keyword && !token.text.trim().is_empty() {
+            TokenType::RegularArg
+                if make_keyword && !token.text.trim().is_empty() => {
                     make_keyword = false;
                     token.ty = TokenType::Keyword;
                 }
-            }
             TokenType::Special => {
                 make_keyword = true;
             }
@@ -680,18 +679,16 @@ impl Shoe {
             // ex. for when doing `echo "do something which may fail" && echo it succeeded!`
             match command.run_condition {
                 RunCondition::Success => {
-                    if let Some(last_success) = last_success {
-                        if !last_success {
+                    if let Some(last_success) = last_success
+                        && !last_success {
                             continue;
                         }
-                    }
                 }
                 RunCondition::Fail => {
-                    if let Some(last_success) = last_success {
-                        if last_success {
+                    if let Some(last_success) = last_success
+                        && last_success {
                             continue;
                         }
-                    }
                 }
                 RunCondition::Any => {}
             }
@@ -795,12 +792,11 @@ impl Shoe {
 
                 // check if it is a script file, if so, try running with appropriate runtime
                 let old = keyword.clone();
-                if let Some((_, extension)) = keyword.rsplit_once(".") {
-                    if let Some(runtime) = get_script_runtime(extension) {
+                if let Some((_, extension)) = keyword.rsplit_once(".")
+                    && let Some(runtime) = get_script_runtime(extension) {
                         command.args.push_front(&old);
                         keyword = runtime.to_string();
                     }
-                }
 
                 let found_binary =
                     binaryfinder::find_binary(&keyword, &self.path_items, &self.path_extensions)?;
@@ -831,11 +827,10 @@ impl Shoe {
                     continue;
                 };
 
-                if let Some(buf) = stdin_data {
-                    if let Some(stdin) = &mut process.stdin {
+                if let Some(buf) = stdin_data
+                    && let Some(stdin) = &mut process.stdin {
                         stdin.write_all(&buf)?;
                     }
-                }
                 let success = process.wait()?.success();
 
                 // if process has readable stdout, strip it from ansi codes and store here
@@ -1070,17 +1065,16 @@ impl Shoe {
                         }
                     }
                 }
-                KeyCode::Up => {
-                    if !self.history.is_empty() {
+                KeyCode::Up
+                    if !self.history.is_empty() => {
                         if self.history_index > 0 {
                             self.history_index -= 1;
                         }
                         self.input_text = self.history[self.history_index].clone();
                         self.cursor_pos = self.input_text.chars().count();
                     }
-                }
-                KeyCode::Down => {
-                    if !self.history.is_empty() {
+                KeyCode::Down
+                    if !self.history.is_empty() => {
                         if self.history_index < self.history.len() {
                             self.history_index += 1;
                         }
@@ -1092,7 +1086,6 @@ impl Shoe {
                             self.cursor_pos = 0;
                         }
                     }
-                }
                 KeyCode::Right => {
                     self.cursor_pos += 1;
                     if self.cursor_pos > self.input_text.chars().count() {
@@ -1280,12 +1273,11 @@ impl Shoe {
                 next_run_condition = RunCondition::Any;
             }
 
-            if done || index == tokens.len() {
-                if let Some(command) = current_command {
+            if (done || index == tokens.len())
+                && let Some(command) = current_command {
                     commands.push(command);
                     current_command = None;
                 }
-            }
         }
         Ok(commands)
     }
@@ -1295,11 +1287,10 @@ impl Shoe {
             return Ok(());
         }
         let mut should_store_history = true;
-        if let Some(last_input) = self.history.last() {
-            if last_input == command {
+        if let Some(last_input) = self.history.last()
+            && last_input == command {
                 should_store_history = false;
             }
-        }
         should_store_history &= allow_history;
 
         if should_store_history {

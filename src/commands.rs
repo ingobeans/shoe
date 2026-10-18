@@ -24,12 +24,12 @@ use crate::{
 fn match_pattern(entries: &[String], pattern: &str) -> Vec<String> {
     if let Some(split) = pattern.split_once("*") {
         let (startswith, endswith) = split;
-        let g = entries
+
+        entries
             .iter()
             .filter(|f| f.starts_with(startswith) && f.ends_with(endswith))
             .map(|f| f.to_string())
-            .collect();
-        g
+            .collect()
     } else {
         for item in entries {
             if *item == pattern {
@@ -172,17 +172,23 @@ fn export(context: &mut CommandContext) -> Result<CommandResult> {
 
 fn alias(context: &mut CommandContext) -> Result<CommandResult> {
     if context.args.is_empty() {
-        for (k,v) in context.aliases.iter() {
+        for (k, v) in context.aliases.iter() {
             writeln!(context.stdout, " - {k}: {v}")?;
         }
         return Ok(CommandResult::Lovely);
     }
     if context.args.len() > 2 {
-        Err(std::io::Error::other("Usage: 'alias <key> <value>', or 'alias <key>' to remove alias"))?
+        Err(std::io::Error::other(
+            "Usage: 'alias <key> <value>', or 'alias <key>' to remove alias",
+        ))?
     }
 
     let key = context.args[0];
-    let value = context.args.get(1).map(|f| f.to_string()).unwrap_or(String::new());
+    let value = context
+        .args
+        .get(1)
+        .map(|f| f.to_string())
+        .unwrap_or_default();
 
     Ok(CommandResult::SetAlias(key.to_string(), value))
 }
@@ -262,10 +268,10 @@ fn echo(context: &mut CommandContext) -> Result<CommandResult> {
             } else if let Some(value) = &mut current_hex {
                 value.push(*c);
                 let as_string = std::str::from_utf8(value);
-                if as_string.is_err() {
-                    current_hex = None;
-                } else if as_string.unwrap().len() >= 2 {
-                    let parsed = u8::from_str_radix(as_string.unwrap(), 16);
+                if let Ok(as_string) = as_string
+                    && as_string.len() >= 2
+                {
+                    let parsed = u8::from_str_radix(as_string, 16);
                     if let Ok(parsed) = parsed {
                         // if it is valid hex, write it, and remove last 2 chars of output to get rid of the "\x"
                         output.pop();
@@ -277,6 +283,8 @@ fn echo(context: &mut CommandContext) -> Result<CommandResult> {
                         output.append(value);
                         current_hex = None;
                     }
+                } else if as_string.is_err() {
+                    current_hex = None;
                 }
             } else {
                 last_was_backslash = false;
@@ -381,7 +389,7 @@ fn rm(context: &mut CommandContext) -> Result<CommandResult> {
         Err(std::io::Error::other("Usage: 'rm <target>'"))?;
     }
     let (matches, source_parent) = match_file_pattern(context.args[0])?;
-    if matches.len() == 0 {
+    if matches.is_empty() {
         Err(std::io::Error::other("No item by name/pattern found"))?;
     }
     for name in matches {
@@ -488,7 +496,7 @@ pub fn execute_command(keyword: &str, context: &mut CommandContext) -> Result<Co
 /// Context passed to builtin commands
 pub struct CommandContext<'a> {
     pub args: &'a VecDeque<&'a str>,
-    pub aliases: &'a HashMap<String,String>,
+    pub aliases: &'a HashMap<String, String>,
     pub theme: &'static Theme,
     pub stdout: &'a mut Vec<u8>,
     pub stdin: Vec<u8>,
